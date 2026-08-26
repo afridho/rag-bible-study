@@ -23,14 +23,17 @@ app.use(
         target: API_URL,
         changeOrigin: true,
         pathRewrite: { "^/api": "/api/bible/bible-study" },
+        followRedirects: false,
     }),
 );
 
 // Serve static files from Vite build
 app.use(express.static(path.join(__dirname, "dist")));
 
-// SPA fallback
-app.use((req, res) => {
+// SPA fallback — only for non-API, non-static requests
+app.use((req, res, next) => {
+    // Don't serve index.html for API routes (shouldn't reach here, but safety)
+    if (req.path.startsWith("/api")) return next();
     res.sendFile(path.join(__dirname, "dist", "index.html"));
 });
 
