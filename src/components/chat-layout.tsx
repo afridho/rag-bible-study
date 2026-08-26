@@ -2,6 +2,8 @@ import React, { useState, useRef, useEffect, type FormEvent } from "react";
 import { Send, Loader2, BookOpen, SquarePen, ChevronDown } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import Lightbox from "yet-another-react-lightbox";
+import "yet-another-react-lightbox/styles.css";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -75,6 +77,9 @@ export function ChatLayout() {
     const [isLoading, setIsLoading] = useState(false);
     const [lessonFilter, setLessonFilter] = useState("");
     const [sectionFilter, setSectionFilter] = useState("");
+    const [lightboxOpen, setLightboxOpen] = useState(false);
+    const [lightboxIndex, setLightboxIndex] = useState(0);
+    const [lightboxSlides, setLightboxSlides] = useState<{ src: string }[]>([]);
     const scrollRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
 
@@ -461,7 +466,13 @@ export function ChatLayout() {
                                                         )}
                                                         {msg.sources &&
                                                             msg.sources.length >
-                                                                0 && (
+                                                                0 &&
+                                                            !(
+                                                                isLoading &&
+                                                                i ===
+                                                                    messages.length -
+                                                                        1
+                                                            ) && (
                                                                 <div className="mt-3 border-t border-border/30 pt-2 text-left">
                                                                     <p className="mb-1 text-[11px] font-medium text-muted-foreground">
                                                                         📚
@@ -525,24 +536,43 @@ export function ChatLayout() {
                                                                                         url,
                                                                                         k,
                                                                                     ) => (
-                                                                                        <a
+                                                                                        <img
                                                                                             key={
                                                                                                 k
                                                                                             }
-                                                                                            href={
+                                                                                            src={
                                                                                                 url
                                                                                             }
-                                                                                            target="_blank"
-                                                                                            rel="noopener noreferrer"
-                                                                                        >
-                                                                                            <img
-                                                                                                src={
-                                                                                                    url
-                                                                                                }
-                                                                                                alt="Ilustrasi"
-                                                                                                className="h-24 w-auto rounded-md border border-border object-contain hover:opacity-80 transition-opacity"
-                                                                                            />
-                                                                                        </a>
+                                                                                            alt="Ilustrasi"
+                                                                                            className="h-24 w-auto cursor-zoom-in rounded-md border border-border object-contain hover:opacity-80 transition-opacity"
+                                                                                            onClick={() => {
+                                                                                                const allImages =
+                                                                                                    msg
+                                                                                                        .sources!.flatMap(
+                                                                                                            (
+                                                                                                                s,
+                                                                                                            ) =>
+                                                                                                                s.images ||
+                                                                                                                [],
+                                                                                                        )
+                                                                                                        .map(
+                                                                                                            (
+                                                                                                                src,
+                                                                                                            ) => ({
+                                                                                                                src,
+                                                                                                            }),
+                                                                                                        );
+                                                                                                setLightboxSlides(
+                                                                                                    allImages,
+                                                                                                );
+                                                                                                setLightboxIndex(
+                                                                                                    k,
+                                                                                                );
+                                                                                                setLightboxOpen(
+                                                                                                    true,
+                                                                                                );
+                                                                                            }}
+                                                                                        />
                                                                                     ),
                                                                                 )}
                                                                         </div>
@@ -652,6 +682,12 @@ export function ChatLayout() {
                     </div>
                 </div>
             </SidebarInset>
+            <Lightbox
+                open={lightboxOpen}
+                close={() => setLightboxOpen(false)}
+                index={lightboxIndex}
+                slides={lightboxSlides}
+            />
         </>
     );
 }
