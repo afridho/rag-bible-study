@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, type FormEvent } from "react";
+import React, { useState, useRef, useEffect, type FormEvent } from "react";
 import { Send, Loader2, BookOpen, SquarePen, ChevronDown } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { SidebarInset, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
+import { VerseLink, splitVerseReferences } from "@/components/verse-link";
 import {
     type ChatSession,
     getSessions,
@@ -301,6 +302,36 @@ export function ChatLayout() {
         }
     }
 
+    /**
+     * Recursively process React children to detect Bible verse references
+     * in text nodes and inject VerseLink components.
+     */
+    function renderWithVerses(children: React.ReactNode): React.ReactNode {
+        return Array.isArray(children)
+            ? children.map((child, i) => renderChild(child, i))
+            : renderChild(children, 0);
+    }
+
+    function renderChild(child: React.ReactNode, key: number): React.ReactNode {
+        if (typeof child !== "string") return child;
+        const parts = splitVerseReferences(child);
+        if (parts.length === 1 && parts[0].type === "text") return child;
+        return (
+            <span key={key}>
+                {parts.map((part, j) =>
+                    part.type === "verse" ? (
+                        <span key={j}>
+                            {part.value}
+                            <VerseLink reference={part.value} />
+                        </span>
+                    ) : (
+                        <span key={j}>{part.value}</span>
+                    ),
+                )}
+            </span>
+        );
+    }
+
     return (
         <>
             <AppSidebar
@@ -396,6 +427,32 @@ export function ChatLayout() {
                                                                     remarkPlugins={[
                                                                         remarkGfm,
                                                                     ]}
+                                                                    components={{
+                                                                        p: ({
+                                                                            children,
+                                                                            ...props
+                                                                        }) => (
+                                                                            <p
+                                                                                {...props}
+                                                                            >
+                                                                                {renderWithVerses(
+                                                                                    children,
+                                                                                )}
+                                                                            </p>
+                                                                        ),
+                                                                        li: ({
+                                                                            children,
+                                                                            ...props
+                                                                        }) => (
+                                                                            <li
+                                                                                {...props}
+                                                                            >
+                                                                                {renderWithVerses(
+                                                                                    children,
+                                                                                )}
+                                                                            </li>
+                                                                        ),
+                                                                    }}
                                                                 >
                                                                     {
                                                                         msg.content

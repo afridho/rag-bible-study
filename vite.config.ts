@@ -13,8 +13,14 @@ export default defineConfig({
     },
     server: {
         proxy: {
+            "/api/verses": {
+                target: process.env.API_URL || "http://localhost:3300",
+                changeOrigin: true,
+                rewrite: (path) =>
+                    path.replace(/^\/api\/verses/, "/api/bible/verses"),
+            },
             "/api": {
-                target: "http://localhost:3300",
+                target: process.env.API_URL || "http://localhost:3300",
                 changeOrigin: true,
                 rewrite: (path) =>
                     path.replace(/^\/api/, "/api/bible/bible-study"),
