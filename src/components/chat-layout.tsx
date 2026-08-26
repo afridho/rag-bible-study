@@ -1,0 +1,557 @@
+import { useState, useRef, useEffect, type FormEvent } from "react";
+import { Send, Loader2, BookOpen, SquarePen, ChevronDown } from "lucide-react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Bubble, BubbleContent } from "@/components/ui/bubble";
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuRadioGroup,
+    DropdownMenuRadioItem,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { SidebarInset, SidebarTrigger } from "@/components/ui/sidebar";
+import { AppSidebar } from "@/components/app-sidebar";
+import {
+    type ChatSession,
+    getSessions,
+    saveSession,
+    deleteSession,
+    generateId,
+} from "@/lib/storage";
+
+const API_BASE =
+    import.meta.env.VITE_API_URL ||
+    "http://localhost:3300/api/bible/bible-study";
+
+const LESSON_LABELS: Record<string, string> = {
+    "": "Semua Pelajaran",
+    "1": "1 - Mencari Tuhan",
+    "2": "2 - Firman Tuhan",
+    "3": "3 - Pemuridan",
+    "4": "4 - Dosa",
+    "5": "5 - Pertobatan",
+    "6": "6 - Salib",
+    "7": "7 - Baptisan",
+    "8": "8 - Jemaat/Gereja",
+    "9": "9 - Roh Kudus",
+};
+
+const SECTION_LABELS: Record<string, string> = {
+    "": "Semua Section",
+    objectives: "Tujuan",
+    tips: "Tips",
+    verses: "Ayat",
+    keywords: "Kata Kunci",
+    questions: "Pertanyaan",
+    application: "Aplikasi",
+    illustrations: "Ilustrasi",
+    general: "Umum",
+};
+
+interface Source {
+    document_id: string;
+    lesson_title: string;
+    lesson_number: number;
+    section_type: string;
+    bible_verses: string[];
+    images: string[];
+}
+
+interface Message {
+    role: "user" | "assistant";
+    content: string;
+    sources?: Source[];
+}
+
+export function ChatLayout() {
+    const [sessions, setSessions] = useState<ChatSession[]>(getSessions);
+    const [activeId, setActiveId] = useState<string | null>(null);
+    const [messages, setMessages] = useState<Message[]>([]);
+    const [input, setInput] = useState("");
+    const [isLoading, setIsLoading] = useState(false);
+    const [lessonFilter, setLessonFilter] = useState("");
+    const [sectionFilter, setSectionFilter] = useState("");
+    const scrollRef = useRef<HTMLDivElement>(null);
+    const inputRef = useRef<HTMLInputElement>(null);
+
+    useEffect(() => {
+        if (activeId && messages.length > 0) {
+            const session = sessions.find((s) => s.id === activeId);
+            if (session) {
+                session.messages = messages;
+                const firstUser = messages.find((m) => m.role === "user");
+                if (firstUser) session.title = firstUser.content.slice(0, 50);
+                saveSession(session);
+            }
+        }
+    }, [messages, activeId, sessions]);
+
+    useEffect(() => {
+        scrollToBottom();
+    }, [messages]);
+
+    function scrollToBottom() {
+        setTimeout(() => {
+            if (scrollRef.current) {
+                scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+            }
+        }, 50);
+    }
+
+    function startNewChat() {
+        const id = generateId();
+        const session: ChatSession = {
+            id,
+            title: "New Chat",
+            messages: [],
+            createdAt: Date.now(),
+        };
+        setSessions((prev) => [session, ...prev]);
+        saveSession(session);
+        setActiveId(id);
+        setMessages([]);
+        inputRef.current?.focus();
+    }
+
+    function selectSession(id: string) {
+        const session = sessions.find((s) => s.id === id);
+        if (session) {
+            setActiveId(id);
+            setMessages(session.messages as Message[]);
+        }
+    }
+
+    function handleDeleteSession(id: string) {
+        deleteSession(id);
+        setSessions((prev) => prev.filter((s) => s.id !== id));
+        if (activeId === id) {
+            setActiveId(null);
+            setMessages([]);
+        }
+    }
+
+    async function handleSubmit(e: FormEvent) {
+        e.preventDefault();
+        const query = input.trim();
+        if (!query || isLoading) return;
+
+        let currentId = activeId;
+        if (!currentId) {
+            const id = generateId();
+            const session: ChatSession = {
+                id,
+                title: query.slice(0, 50),
+                messages: [],
+                createdAt: Date.now(),
+            };
+            setSessions((prev) => [session, ...prev]);
+            saveSession(session);
+            setActiveId(id);
+            currentId = id;
+        }
+
+        const userMsg: Message = { role: "user", content: query };
+        setMessages((prev) => [...prev, userMsg]);
+        setInput("");
+        setIsLoading(true);
+
+        try {
+            const history = [...messages, userMsg]
+                .filter((m) => m.role === "user" || m.role === "assistant")
+                .slice(-20)
+                .map((m) => ({ role: m.role, content: m.content }));
+
+            const body: Record<string, unknown> = { query, history };
+            if (lessonFilter) body.lesson = parseInt(lessonFilter);
+            if (sectionFilter) body.section_type = sectionFilter;
+
+            const res = await fetch(`${API_BASE}/query/stream`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(body),
+            });
+
+            if (!res.ok) {
+                const err = await res.json();
+                throw new Error(err.error || "Request failed");
+            }
+
+            const reader = res.body!.getReader();
+            const decoder = new TextDecoder();
+            let buffer = "";
+            let fullAnswer = "";
+            let sources: Source[] = [];
+            let eventType = "";
+
+            setMessages((prev) => [
+                ...prev,
+                { role: "assistant", content: "" },
+            ]);
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                buffer += decoder.decode(value, { stream: true });
+                const lines = buffer.split("\n");
+                buffer = lines.pop() || "";
+
+                for (const line of lines) {
+                    if (line.startsWith("event: ")) {
+                        eventType = line.slice(7).trim();
+                    } else if (line.startsWith("data: ") && eventType) {
+                        try {
+                            const data = JSON.parse(line.slice(6));
+                            if (eventType === "meta")
+                                sources = data.sources || [];
+                            else if (eventType === "token") {
+                                fullAnswer += data.delta;
+                                setMessages((prev) => {
+                                    const u = [...prev];
+                                    u[u.length - 1] = {
+                                        role: "assistant",
+                                        content: fullAnswer,
+                                        sources,
+                                    };
+                                    return u;
+                                });
+                            } else if (eventType === "done") {
+                                fullAnswer = data.answer || fullAnswer;
+                                setMessages((prev) => {
+                                    const u = [...prev];
+                                    u[u.length - 1] = {
+                                        role: "assistant",
+                                        content: fullAnswer,
+                                        sources,
+                                    };
+                                    return u;
+                                });
+                            } else if (eventType === "error")
+                                throw new Error(data.message);
+                        } catch {
+                            /* skip */
+                        }
+                        eventType = "";
+                    }
+                }
+            }
+        } catch (err) {
+            setMessages((prev) => [
+                ...prev.filter((m) => m.content !== ""),
+                {
+                    role: "assistant",
+                    content: `❌ Error: ${(err as Error).message}`,
+                },
+            ]);
+        } finally {
+            setIsLoading(false);
+            inputRef.current?.focus();
+        }
+    }
+
+    return (
+        <>
+            <AppSidebar
+                sessions={sessions}
+                activeId={activeId}
+                onSelect={selectSession}
+                onNew={startNewChat}
+                onDelete={handleDeleteSession}
+            />
+            <SidebarInset>
+                <div className="relative flex h-svh flex-col">
+                    {/* Floating toolbar (top-left like Gemini) */}
+                    <div className="absolute left-4 top-4 z-10 flex items-center gap-1">
+                        <SidebarTrigger />
+                        <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            onClick={startNewChat}
+                            title="New chat"
+                        >
+                            <SquarePen className="size-4" />
+                        </Button>
+                    </div>
+
+                    {/* Messages */}
+                    <div className="min-h-0 flex-1">
+                        <ScrollArea className="h-full" ref={scrollRef}>
+                            <div className="mx-auto max-w-3xl space-y-4 px-6 pt-16 pb-6">
+                                {messages.length === 0 && (
+                                    <div className="flex flex-col items-center justify-center py-20 text-center">
+                                        <BookOpen className="mb-4 h-12 w-12 text-muted-foreground/50" />
+                                        <h2 className="mb-2 text-lg font-medium">
+                                            {/* Bible Study  */}
+                                            RAG
+                                        </h2>
+                                        <p className="max-w-md text-sm text-muted-foreground">
+                                            Tanyakan apa saja tentang kurikulum
+                                            "Pelajaran Dasar-Dasar Utama".
+                                        </p>
+                                    </div>
+                                )}
+
+                                {messages.map((msg, i) => {
+                                    const isUser = msg.role === "user";
+                                    if (!msg.content && !isUser) return null;
+                                    return (
+                                        <div
+                                            key={i}
+                                            className={cn(
+                                                "flex gap-3",
+                                                isUser
+                                                    ? "flex-row-reverse"
+                                                    : "flex-row",
+                                            )}
+                                        >
+                                            <div className="flex-shrink-0 pt-1">
+                                                <div
+                                                    className={cn(
+                                                        "flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold",
+                                                        isUser
+                                                            ? "bg-primary text-primary-foreground"
+                                                            : "bg-muted text-muted-foreground",
+                                                    )}
+                                                >
+                                                    {isUser ? "U" : "📖"}
+                                                </div>
+                                            </div>
+                                            <div
+                                                className={cn(
+                                                    "min-w-0 flex-1",
+                                                    isUser &&
+                                                        "flex justify-end",
+                                                )}
+                                            >
+                                                <Bubble
+                                                    variant={
+                                                        isUser
+                                                            ? "default"
+                                                            : "secondary"
+                                                    }
+                                                    align={
+                                                        isUser ? "end" : "start"
+                                                    }
+                                                >
+                                                    <BubbleContent>
+                                                        {isUser ? (
+                                                            <div className="whitespace-pre-wrap">
+                                                                {msg.content}
+                                                            </div>
+                                                        ) : (
+                                                            <div className="prose prose-sm dark:prose-invert max-w-none prose-p:my-1 prose-ul:my-1 prose-ol:my-1 prose-li:my-0.5 prose-headings:my-2 text-left">
+                                                                <ReactMarkdown
+                                                                    remarkPlugins={[
+                                                                        remarkGfm,
+                                                                    ]}
+                                                                >
+                                                                    {
+                                                                        msg.content
+                                                                    }
+                                                                </ReactMarkdown>
+                                                            </div>
+                                                        )}
+                                                        {msg.sources &&
+                                                            msg.sources.length >
+                                                                0 && (
+                                                                <div className="mt-3 border-t border-border/30 pt-2 text-left">
+                                                                    <p className="mb-1 text-[11px] font-medium text-muted-foreground">
+                                                                        📚
+                                                                        Sumber:
+                                                                    </p>
+                                                                    <div className="flex flex-wrap gap-1">
+                                                                        {msg.sources.map(
+                                                                            (
+                                                                                s,
+                                                                                j,
+                                                                            ) => (
+                                                                                <Badge
+                                                                                    key={
+                                                                                        j
+                                                                                    }
+                                                                                    variant="secondary"
+                                                                                    className="text-[10px]"
+                                                                                >
+                                                                                    L
+                                                                                    {
+                                                                                        s.lesson_number
+                                                                                    }
+
+                                                                                    :{" "}
+                                                                                    {
+                                                                                        s.lesson_title
+                                                                                    }{" "}
+                                                                                    (
+                                                                                    {
+                                                                                        s.section_type
+                                                                                    }
+
+                                                                                    )
+                                                                                    {s
+                                                                                        .bible_verses
+                                                                                        ?.length >
+                                                                                        0 &&
+                                                                                        ` — ${s.bible_verses.join(", ")}`}
+                                                                                </Badge>
+                                                                            ),
+                                                                        )}
+                                                                    </div>
+                                                                    {msg.sources.some(
+                                                                        (s) =>
+                                                                            s
+                                                                                .images
+                                                                                ?.length >
+                                                                            0,
+                                                                    ) && (
+                                                                        <div className="mt-2 flex flex-wrap gap-2">
+                                                                            {msg.sources
+                                                                                .flatMap(
+                                                                                    (
+                                                                                        s,
+                                                                                    ) =>
+                                                                                        s.images ||
+                                                                                        [],
+                                                                                )
+                                                                                .map(
+                                                                                    (
+                                                                                        url,
+                                                                                        k,
+                                                                                    ) => (
+                                                                                        <a
+                                                                                            key={
+                                                                                                k
+                                                                                            }
+                                                                                            href={
+                                                                                                url
+                                                                                            }
+                                                                                            target="_blank"
+                                                                                            rel="noopener noreferrer"
+                                                                                        >
+                                                                                            <img
+                                                                                                src={
+                                                                                                    url
+                                                                                                }
+                                                                                                alt="Ilustrasi"
+                                                                                                className="h-24 w-auto rounded-md border border-border object-contain hover:opacity-80 transition-opacity"
+                                                                                            />
+                                                                                        </a>
+                                                                                    ),
+                                                                                )}
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            )}
+                                                    </BubbleContent>
+                                                </Bubble>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+
+                                {isLoading &&
+                                    messages[messages.length - 1]?.content ===
+                                        "" && (
+                                        <div className="flex items-center gap-3">
+                                            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-muted text-xs">
+                                                📖
+                                            </div>
+                                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                                <Loader2 className="h-4 w-4 animate-spin" />
+                                                <span>Sedang berpikir...</span>
+                                            </div>
+                                        </div>
+                                    )}
+                            </div>
+                        </ScrollArea>
+                    </div>
+
+                    {/* Input */}
+                    <div className="mx-auto max-w-3xl px-6 py-3">
+                        <form
+                            onSubmit={handleSubmit}
+                            className="mx-auto max-w-3xl rounded-2xl bg-muted/50 px-4 py-2"
+                        >
+                            <div className="flex items-center gap-2">
+                                <input
+                                    ref={inputRef}
+                                    value={input}
+                                    onChange={(e) => setInput(e.target.value)}
+                                    placeholder="Ketik pertanyaan..."
+                                    disabled={isLoading}
+                                    className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none disabled:opacity-50"
+                                    autoFocus
+                                />
+                                <Button
+                                    type="submit"
+                                    size="icon-sm"
+                                    className="shrink-0 rounded-full"
+                                    disabled={isLoading || !input.trim()}
+                                >
+                                    <Send className="size-4" />
+                                </Button>
+                            </div>
+                            <div className="mt-1.5 flex items-center gap-1.5">
+                                <DropdownMenu>
+                                    <DropdownMenuTrigger className="inline-flex h-6 items-center gap-1 rounded-full border border-border bg-transparent px-2.5 text-[10px] text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-accent-foreground">
+                                        {LESSON_LABELS[lessonFilter]}
+                                        <ChevronDown className="size-3" />
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent
+                                        align="start"
+                                        className="min-w-[180px]"
+                                    >
+                                        <DropdownMenuRadioGroup
+                                            value={lessonFilter}
+                                            onValueChange={setLessonFilter}
+                                        >
+                                            {Object.entries(LESSON_LABELS).map(
+                                                ([value, label]) => (
+                                                    <DropdownMenuRadioItem
+                                                        key={value}
+                                                        value={value}
+                                                    >
+                                                        {label}
+                                                    </DropdownMenuRadioItem>
+                                                ),
+                                            )}
+                                        </DropdownMenuRadioGroup>
+                                    </DropdownMenuContent>
+                                </DropdownMenu>
+                                <DropdownMenu>
+                                    <DropdownMenuTrigger className="inline-flex h-6 items-center gap-1 rounded-full border border-border bg-transparent px-2.5 text-[10px] text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-accent-foreground">
+                                        {SECTION_LABELS[sectionFilter]}
+                                        <ChevronDown className="size-3" />
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent
+                                        align="start"
+                                        className="min-w-[160px]"
+                                    >
+                                        <DropdownMenuRadioGroup
+                                            value={sectionFilter}
+                                            onValueChange={setSectionFilter}
+                                        >
+                                            {Object.entries(SECTION_LABELS).map(
+                                                ([value, label]) => (
+                                                    <DropdownMenuRadioItem
+                                                        key={value}
+                                                        value={value}
+                                                    >
+                                                        {label}
+                                                    </DropdownMenuRadioItem>
+                                                ),
+                                            )}
+                                        </DropdownMenuRadioGroup>
+                                    </DropdownMenuContent>
+                                </DropdownMenu>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </SidebarInset>
+        </>
+    );
+}

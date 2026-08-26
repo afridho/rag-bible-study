@@ -1,8 +1,21 @@
 import { useState, useRef, useEffect, type FormEvent } from "react";
-import { Send, Trash2, BookOpen, Loader2 } from "lucide-react";
+import { Send, Loader2, BookOpen } from "lucide-react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Bubble, BubbleContent } from "@/components/ui/bubble";
+import { Sidebar } from "@/components/sidebar";
+import {
+    type ChatSession,
+    getSessions,
+    saveSession,
+    deleteSession,
+    generateId,
+} from "@/lib/storage";
 
 const API_BASE =
     import.meta.env.VITE_API_URL ||
@@ -17,56 +30,79 @@ interface Source {
 }
 
 interface Message {
-    role: "user" | "assistant" | "system";
+    role: "user" | "assistant";
     content: string;
     sources?: Source[];
 }
 
-interface Stats {
-    totalDocuments: number;
-    totalChunks: number;
-    indexedDocuments: number;
-}
-
 export function Chat() {
-    const [messages, setMessages] = useState<Message[]>([
-        {
-            role: "system",
-            content:
-                'Selamat datang! Tanyakan apa saja tentang kurikulum studi Alkitab "Pelajaran Dasar-Dasar Utama".',
-        },
-    ]);
+    const [sessions, setSessions] = useState<ChatSession[]>(getSessions);
+    const [activeId, setActiveId] = useState<string | null>(null);
+    const [messages, setMessages] = useState<Message[]>([]);
     const [input, setInput] = useState("");
     const [isLoading, setIsLoading] = useState(false);
     const [lessonFilter, setLessonFilter] = useState("");
     const [sectionFilter, setSectionFilter] = useState("");
-    const [stats, setStats] = useState<Stats | null>(null);
     const scrollRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
 
-    const historyRef = useRef<{ role: string; content: string }[]>([]);
-
+    // Sync messages to localStorage on change
     useEffect(() => {
-        loadStats();
-    }, []);
+        if (activeId && messages.length > 0) {
+            const session = sessions.find((s) => s.id === activeId);
+            if (session) {
+                session.messages = messages;
+                // Update title from first user message
+                const firstUser = messages.find((m) => m.role === "user");
+                if (firstUser) {
+                    session.title = firstUser.content.slice(0, 50);
+                }
+                saveSession(session);
+            }
+        }
+    }, [messages, activeId, sessions]);
 
     useEffect(() => {
         scrollToBottom();
     }, [messages]);
 
     function scrollToBottom() {
-        if (scrollRef.current) {
-            scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+        setTimeout(() => {
+            if (scrollRef.current) {
+                scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+            }
+        }, 50);
+    }
+
+    function startNewChat() {
+        const id = generateId();
+        const session: ChatSession = {
+            id,
+            title: "New Chat",
+            messages: [],
+            createdAt: Date.now(),
+        };
+        setSessions((prev) => [session, ...prev]);
+        saveSession(session);
+        setActiveId(id);
+        setMessages([]);
+        inputRef.current?.focus();
+    }
+
+    function selectSession(id: string) {
+        const session = sessions.find((s) => s.id === id);
+        if (session) {
+            setActiveId(id);
+            setMessages(session.messages as Message[]);
         }
     }
 
-    async function loadStats() {
-        try {
-            const res = await fetch(`${API_BASE}/status`);
-            const data = await res.json();
-            if (data.success) setStats(data.status);
-        } catch {
-            // silently fail
+    function handleDeleteSession(id: string) {
+        deleteSession(id);
+        setSessions((prev) => prev.filter((s) => s.id !== id));
+        if (activeId === id) {
+            setActiveId(null);
+            setMessages([]);
         }
     }
 
@@ -75,16 +111,34 @@ export function Chat() {
         const query = input.trim();
         if (!query || isLoading) return;
 
-        setMessages((prev) => [...prev, { role: "user", content: query }]);
-        historyRef.current.push({ role: "user", content: query });
+        // Auto-create session if none active
+        let currentId = activeId;
+        if (!currentId) {
+            const id = generateId();
+            const session: ChatSession = {
+                id,
+                title: query.slice(0, 50),
+                messages: [],
+                createdAt: Date.now(),
+            };
+            setSessions((prev) => [session, ...prev]);
+            saveSession(session);
+            setActiveId(id);
+            currentId = id;
+        }
+
+        const userMsg: Message = { role: "user", content: query };
+        setMessages((prev) => [...prev, userMsg]);
         setInput("");
         setIsLoading(true);
 
         try {
-            const body: Record<string, unknown> = {
-                query,
-                history: historyRef.current.slice(-20),
-            };
+            const history = [...messages, userMsg]
+                .filter((m) => m.role === "user" || m.role === "assistant")
+                .slice(-20)
+                .map((m) => ({ role: m.role, content: m.content }));
+
+            const body: Record<string, unknown> = { query, history };
             if (lessonFilter) body.lesson = parseInt(lessonFilter);
             if (sectionFilter) body.section_type = sectionFilter;
 
@@ -106,9 +160,10 @@ export function Chat() {
             let sources: Source[] = [];
             let eventType = "";
 
+            // Add placeholder
             setMessages((prev) => [
                 ...prev,
-                { role: "assistant", content: "", sources: [] },
+                { role: "assistant", content: "" },
             ]);
 
             while (true) {
@@ -125,7 +180,6 @@ export function Chat() {
                     } else if (line.startsWith("data: ") && eventType) {
                         try {
                             const data = JSON.parse(line.slice(6));
-
                             if (eventType === "meta") {
                                 sources = data.sources || [];
                             } else if (eventType === "token") {
@@ -154,19 +208,17 @@ export function Chat() {
                                 throw new Error(data.message);
                             }
                         } catch {
-                            // skip malformed
+                            // skip
                         }
                         eventType = "";
                     }
                 }
             }
-
-            historyRef.current.push({ role: "assistant", content: fullAnswer });
         } catch (err) {
             setMessages((prev) => [
                 ...prev.filter((m) => m.content !== ""),
                 {
-                    role: "system",
+                    role: "assistant",
                     content: `❌ Error: ${(err as Error).message}`,
                 },
             ]);
@@ -176,169 +228,240 @@ export function Chat() {
         }
     }
 
-    function clearChat() {
-        historyRef.current = [];
-        setMessages([
-            {
-                role: "system",
-                content:
-                    "Percakapan direset. Tanyakan apa saja tentang kurikulum studi Alkitab.",
-            },
-        ]);
-    }
-
     return (
-        <div className="flex h-full flex-col bg-background text-foreground">
-            {/* Header */}
-            <header className="flex items-center gap-3 border-b border-border px-6 py-4">
-                <BookOpen className="h-6 w-6 text-primary" />
-                <div className="flex-1">
-                    <h1 className="text-lg font-semibold">Bible Study RAG</h1>
-                    <p className="text-xs text-muted-foreground">
-                        Pelajaran Dasar-Dasar Utama — Tanya jawab berbasis
-                        kurikulum
-                    </p>
-                </div>
-                {stats && (
-                    <div className="hidden gap-3 text-xs text-muted-foreground sm:flex">
-                        <span>📄 {stats.totalDocuments} docs</span>
-                        <span>🧩 {stats.totalChunks} chunks</span>
-                    </div>
-                )}
-            </header>
+        <div className="flex h-full bg-background text-foreground">
+            {/* Sidebar */}
+            <Sidebar
+                sessions={sessions}
+                activeId={activeId}
+                onSelect={selectSession}
+                onNew={startNewChat}
+                onDelete={handleDeleteSession}
+            />
 
-            {/* Messages */}
-            <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-4">
-                <div className="mx-auto max-w-3xl space-y-4">
-                    {messages.map((msg, i) => (
-                        <MessageBubble key={i} message={msg} />
-                    ))}
-                    {isLoading &&
-                        messages[messages.length - 1]?.content === "" && (
-                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                <Loader2 className="h-4 w-4 animate-spin" />
-                                Sedang berpikir...
-                            </div>
-                        )}
-                </div>
-            </div>
+            {/* Main Chat Area */}
+            <div className="flex flex-1 flex-col">
+                {/* Header */}
+                <header className="flex items-center gap-3 border-b border-border px-6 py-3">
+                    <BookOpen className="h-5 w-5 text-primary" />
+                    <h1 className="text-sm font-semibold">Bible Study RAG</h1>
+                    <span className="text-xs text-muted-foreground">
+                        Pelajaran Dasar-Dasar Utama
+                    </span>
+                </header>
 
-            {/* Input Area */}
-            <div className="border-t border-border px-4 py-3">
-                <form
-                    onSubmit={handleSubmit}
-                    className="mx-auto flex max-w-3xl gap-2"
-                >
-                    <Input
-                        ref={inputRef}
-                        value={input}
-                        onChange={(e) => setInput(e.target.value)}
-                        placeholder="Ketik pertanyaan tentang studi Alkitab..."
-                        disabled={isLoading}
-                        className="flex-1"
-                        autoFocus
-                    />
-                    <Button
-                        type="submit"
-                        size="icon"
-                        disabled={isLoading || !input.trim()}
-                    >
-                        <Send className="h-4 w-4" />
-                    </Button>
-                    <Button
-                        type="button"
-                        variant="outline"
-                        size="icon"
-                        onClick={clearChat}
-                        title="Clear chat"
-                    >
-                        <Trash2 className="h-4 w-4" />
-                    </Button>
-                </form>
+                {/* Messages */}
+                <div className="min-h-0 flex-1">
+                    <ScrollArea className="h-full" ref={scrollRef}>
+                        <div className="mx-auto max-w-3xl space-y-4 px-6 py-6">
+                            {messages.length === 0 && !activeId && (
+                                <div className="flex flex-col items-center justify-center py-20 text-center">
+                                    <BookOpen className="mb-4 h-12 w-12 text-muted-foreground/50" />
+                                    <h2 className="mb-2 text-lg font-medium">
+                                        Bible Study RAG
+                                    </h2>
+                                    <p className="max-w-md text-sm text-muted-foreground">
+                                        Tanyakan apa saja tentang kurikulum
+                                        "Pelajaran Dasar-Dasar Utama". Contoh:
+                                        "Apa itu pemuridan?", "Jelaskan tentang
+                                        baptisan"
+                                    </p>
+                                </div>
+                            )}
 
-                {/* Filters */}
-                <div className="mx-auto mt-2 flex max-w-3xl gap-2">
-                    <select
-                        value={lessonFilter}
-                        onChange={(e) => setLessonFilter(e.target.value)}
-                        className="h-8 rounded-md border border-input bg-background px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-                    >
-                        <option value="">Semua Pelajaran</option>
-                        <option value="1">1 - Mencari Tuhan</option>
-                        <option value="2">2 - Firman Tuhan</option>
-                        <option value="3">3 - Pemuridan</option>
-                        <option value="4">4 - Dosa</option>
-                        <option value="5">5 - Pertobatan</option>
-                        <option value="6">6 - Salib</option>
-                        <option value="7">7 - Baptisan</option>
-                        <option value="8">8 - Jemaat/Gereja</option>
-                        <option value="9">9 - Roh Kudus</option>
-                    </select>
+                            {messages.length === 0 && activeId && (
+                                <div className="py-12 text-center text-sm text-muted-foreground">
+                                    Start a conversation...
+                                </div>
+                            )}
 
-                    <select
-                        value={sectionFilter}
-                        onChange={(e) => setSectionFilter(e.target.value)}
-                        className="h-8 rounded-md border border-input bg-background px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-                    >
-                        <option value="">Semua Section</option>
-                        <option value="objectives">Tujuan</option>
-                        <option value="tips">Tips Mengajar</option>
-                        <option value="verses">Ayat Alkitab</option>
-                        <option value="keywords">Kata Kunci</option>
-                        <option value="questions">Pertanyaan</option>
-                        <option value="application">Aplikasi</option>
-                        <option value="illustrations">Ilustrasi</option>
-                        <option value="general">Umum</option>
-                    </select>
-                </div>
-            </div>
-        </div>
-    );
-}
+                            {messages.map((msg, i) => {
+                                const isUser = msg.role === "user";
 
-function MessageBubble({ message }: { message: Message }) {
-    if (message.role === "system") {
-        return (
-            <div className="text-center text-sm text-muted-foreground">
-                {message.content}
-            </div>
-        );
-    }
+                                return (
+                                    <div
+                                        key={i}
+                                        className={cn(
+                                            "flex gap-3",
+                                            isUser
+                                                ? "flex-row-reverse"
+                                                : "flex-row",
+                                        )}
+                                    >
+                                        {/* Avatar */}
+                                        <div className="flex-shrink-0">
+                                            <div
+                                                className={cn(
+                                                    "flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold",
+                                                    isUser
+                                                        ? "bg-primary text-primary-foreground"
+                                                        : "bg-muted text-muted-foreground",
+                                                )}
+                                            >
+                                                {isUser ? "U" : "📖"}
+                                            </div>
+                                        </div>
 
-    const isUser = message.role === "user";
+                                        {/* Bubble */}
+                                        <div
+                                            className={cn(
+                                                "min-w-0 flex-1",
+                                                isUser && "flex justify-end",
+                                            )}
+                                        >
+                                            <Bubble
+                                                variant={
+                                                    isUser
+                                                        ? "default"
+                                                        : "secondary"
+                                                }
+                                                align={isUser ? "end" : "start"}
+                                            >
+                                                <BubbleContent>
+                                                    {isUser ? (
+                                                        <div className="whitespace-pre-wrap">
+                                                            {msg.content}
+                                                        </div>
+                                                    ) : (
+                                                        <div className="prose prose-sm dark:prose-invert max-w-none prose-p:my-1 prose-ul:my-1 prose-ol:my-1 prose-li:my-0.5 prose-headings:my-2 text-left">
+                                                            <ReactMarkdown
+                                                                remarkPlugins={[
+                                                                    remarkGfm,
+                                                                ]}
+                                                            >
+                                                                {msg.content}
+                                                            </ReactMarkdown>
+                                                        </div>
+                                                    )}
+                                                    {msg.sources &&
+                                                        msg.sources.length >
+                                                            0 && (
+                                                            <div className="mt-3 border-t border-border/30 pt-2 text-left">
+                                                                <p className="mb-1 text-[11px] font-medium text-muted-foreground">
+                                                                    📚 Sumber:
+                                                                </p>
+                                                                <div className="flex flex-wrap gap-1">
+                                                                    {msg.sources.map(
+                                                                        (
+                                                                            s,
+                                                                            j,
+                                                                        ) => (
+                                                                            <Badge
+                                                                                key={
+                                                                                    j
+                                                                                }
+                                                                                variant="secondary"
+                                                                                className="text-[10px]"
+                                                                            >
+                                                                                L
+                                                                                {
+                                                                                    s.lesson_number
+                                                                                }
 
-    return (
-        <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
-            <div
-                className={`max-w-[85%] rounded-lg px-4 py-2.5 text-sm whitespace-pre-wrap ${
-                    isUser
-                        ? "bg-primary text-primary-foreground"
-                        : "bg-muted text-foreground"
-                }`}
-            >
-                {message.content}
+                                                                                :{" "}
+                                                                                {
+                                                                                    s.lesson_title
+                                                                                }{" "}
+                                                                                (
+                                                                                {
+                                                                                    s.section_type
+                                                                                }
 
-                {message.sources && message.sources.length > 0 && (
-                    <div className="mt-3 border-t border-border/50 pt-2">
-                        <p className="mb-1 text-xs font-medium opacity-70">
-                            📚 Sumber:
-                        </p>
-                        <div className="flex flex-wrap gap-1">
-                            {message.sources.map((s, i) => (
-                                <Badge
-                                    key={i}
-                                    variant="secondary"
-                                    className="text-[10px]"
-                                >
-                                    L{s.lesson_number}: {s.lesson_title} (
-                                    {s.section_type})
-                                    {s.bible_verses?.length > 0 &&
-                                        ` — ${s.bible_verses.join(", ")}`}
-                                </Badge>
-                            ))}
+                                                                                )
+                                                                                {s
+                                                                                    .bible_verses
+                                                                                    ?.length >
+                                                                                    0 &&
+                                                                                    ` — ${s.bible_verses.join(", ")}`}
+                                                                            </Badge>
+                                                                        ),
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                        )}
+                                                </BubbleContent>
+                                            </Bubble>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+
+                            {isLoading &&
+                                messages[messages.length - 1]?.content ===
+                                    "" && (
+                                    <div className="flex items-center gap-3">
+                                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-muted text-xs">
+                                            📖
+                                        </div>
+                                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                            <Loader2 className="h-4 w-4 animate-spin" />
+                                            <span>Sedang berpikir...</span>
+                                        </div>
+                                    </div>
+                                )}
                         </div>
+                    </ScrollArea>
+                </div>
+
+                {/* Input */}
+                <div className="border-t border-border px-6 py-3">
+                    <form
+                        onSubmit={handleSubmit}
+                        className="mx-auto flex max-w-3xl gap-2"
+                    >
+                        <Input
+                            ref={inputRef}
+                            value={input}
+                            onChange={(e) => setInput(e.target.value)}
+                            placeholder="Ketik pertanyaan..."
+                            disabled={isLoading}
+                            className="flex-1"
+                            autoFocus
+                        />
+                        <Button
+                            type="submit"
+                            size="icon"
+                            disabled={isLoading || !input.trim()}
+                        >
+                            <Send className="h-4 w-4" />
+                        </Button>
+                    </form>
+
+                    {/* Filters */}
+                    <div className="mx-auto mt-2 flex max-w-3xl gap-2">
+                        <select
+                            value={lessonFilter}
+                            onChange={(e) => setLessonFilter(e.target.value)}
+                            className="h-7 rounded-md border border-input bg-background px-2 text-[11px] text-foreground"
+                        >
+                            <option value="">Semua Pelajaran</option>
+                            <option value="1">1 - Mencari Tuhan</option>
+                            <option value="2">2 - Firman Tuhan</option>
+                            <option value="3">3 - Pemuridan</option>
+                            <option value="4">4 - Dosa</option>
+                            <option value="5">5 - Pertobatan</option>
+                            <option value="6">6 - Salib</option>
+                            <option value="7">7 - Baptisan</option>
+                            <option value="8">8 - Jemaat/Gereja</option>
+                            <option value="9">9 - Roh Kudus</option>
+                        </select>
+                        <select
+                            value={sectionFilter}
+                            onChange={(e) => setSectionFilter(e.target.value)}
+                            className="h-7 rounded-md border border-input bg-background px-2 text-[11px] text-foreground"
+                        >
+                            <option value="">Semua Section</option>
+                            <option value="objectives">Tujuan</option>
+                            <option value="tips">Tips Mengajar</option>
+                            <option value="verses">Ayat Alkitab</option>
+                            <option value="keywords">Kata Kunci</option>
+                            <option value="questions">Pertanyaan</option>
+                            <option value="application">Aplikasi</option>
+                            <option value="illustrations">Ilustrasi</option>
+                            <option value="general">Umum</option>
+                        </select>
                     </div>
-                )}
+                </div>
             </div>
         </div>
     );
