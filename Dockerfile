@@ -17,23 +17,25 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-# 🔑 RAILWAY BUILD ARGUMENTS
-ARG VITE_API_URL
-ENV VITE_API_URL=$VITE_API_URL
-
 RUN yarn build
 
-# Stage 3: Serve static files
+# Stage 3: Production server
 FROM node:22-alpine AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
 
-RUN yarn global add serve
-
+# Copy built assets and server
 COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/server.cjs ./server.cjs
+COPY --from=builder /app/package.json ./package.json
+COPY --from=builder /app/yarn.lock ./yarn.lock
+
+# Install production dependencies only
+RUN --mount=type=cache,id=s/947e19bc-a7e5-41d3-ac6e-ba2941d0a2f6-/root/.yarn,target=/root/.yarn \
+    yarn install --frozen-lockfile --production
 
 EXPOSE 3000
 ENV PORT=3000
 
-CMD ["serve", "dist", "-s", "-l", "3000"]
+CMD ["node", "server.cjs"]
