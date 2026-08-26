@@ -45,17 +45,17 @@ const LESSON_LABELS: [string, string][] = [
     ["9", "9 - Roh Kudus"],
 ];
 
-const SECTION_LABELS: [string, string][] = [
-    ["", "Semua Section"],
-    ["objectives", "Tujuan"],
-    ["tips", "Tips"],
-    ["verses", "Ayat"],
-    ["keywords", "Kata Kunci"],
-    ["questions", "Pertanyaan"],
-    ["application", "Aplikasi"],
-    ["illustrations", "Ilustrasi"],
-    ["general", "Umum"],
-];
+// const SECTION_LABELS: [string, string][] = [
+//     ["", "Semua Section"],
+//     ["objectives", "Tujuan"],
+//     ["tips", "Tips"],
+//     ["verses", "Ayat"],
+//     ["keywords", "Kata Kunci"],
+//     ["questions", "Pertanyaan"],
+//     ["application", "Aplikasi"],
+//     ["illustrations", "Ilustrasi"],
+//     ["general", "Umum"],
+// ];
 
 interface Source {
     document_id: string;
@@ -79,7 +79,7 @@ export function ChatLayout() {
     const [input, setInput] = useState("");
     const [isLoading, setIsLoading] = useState(false);
     const [lessonFilter, setLessonFilter] = useState("");
-    const [sectionFilter, setSectionFilter] = useState("");
+    // const [sectionFilter, setSectionFilter] = useState("");
     const [lightboxOpen, setLightboxOpen] = useState(false);
     const [lightboxIndex, setLightboxIndex] = useState(0);
     const [lightboxSlides, setLightboxSlides] = useState<{ src: string }[]>([]);
@@ -249,7 +249,7 @@ export function ChatLayout() {
 
             const body: Record<string, unknown> = { query, history };
             if (lessonFilter) body.lesson = parseInt(lessonFilter);
-            if (sectionFilter) body.section_type = sectionFilter;
+            // if (sectionFilter) body.section_type = sectionFilter;
             if (nickname) body.name = nickname;
 
             const controller = new AbortController();
@@ -789,6 +789,7 @@ export function ChatLayout() {
                                     </DropdownMenuRadioGroup>
                                 </DropdownMenuContent>
                             </DropdownMenu>
+                            {/* Section filter - disabled for now
                             <DropdownMenu>
                                 <DropdownMenuTrigger className="inline-flex h-7 shrink-0 items-center gap-1 rounded-full border border-border bg-transparent px-2.5 text-[10px] text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-accent-foreground">
                                     {
@@ -819,6 +820,7 @@ export function ChatLayout() {
                                     </DropdownMenuRadioGroup>
                                 </DropdownMenuContent>
                             </DropdownMenu>
+                            */}
                             {isLoading ? (
                                 <Button
                                     type="button"
