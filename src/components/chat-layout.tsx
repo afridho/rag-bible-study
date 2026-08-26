@@ -24,9 +24,7 @@ import {
     generateId,
 } from "@/lib/storage";
 
-const API_BASE =
-    import.meta.env.VITE_API_URL ||
-    "http://localhost:3300/api/bible/bible-study";
+const API_BASE = import.meta.env.VITE_API_URL || "/api";
 
 const LESSON_LABELS: Record<string, string> = {
     "": "Semua Pelajaran",
@@ -79,6 +77,54 @@ export function ChatLayout() {
     const scrollRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
 
+    // Sync activeId from URL hash on mount
+    useEffect(() => {
+        const hash = window.location.hash.slice(1);
+        if (hash) {
+            const allSessions = getSessions();
+            const found = allSessions.find((s) => s.id === hash);
+            if (found) {
+                setActiveId(found.id);
+                setMessages(found.messages as Message[]);
+            } else {
+                window.history.replaceState(null, "", window.location.pathname);
+            }
+        }
+    }, []);
+
+    // Update URL hash when activeId changes
+    useEffect(() => {
+        const currentHash = window.location.hash.slice(1);
+        if (activeId && currentHash !== activeId) {
+            window.history.replaceState(null, "", `#${activeId}`);
+        } else if (!activeId && currentHash) {
+            window.history.replaceState(null, "", window.location.pathname);
+        }
+    }, [activeId]);
+
+    // Listen for browser back/forward (hashchange)
+    useEffect(() => {
+        function onHashChange() {
+            const hash = window.location.hash.slice(1);
+            if (hash && hash !== activeId) {
+                const allSessions = getSessions();
+                const found = allSessions.find((s) => s.id === hash);
+                if (found) {
+                    setActiveId(found.id);
+                    setMessages(found.messages as Message[]);
+                } else {
+                    setActiveId(null);
+                    setMessages([]);
+                }
+            } else if (!hash) {
+                setActiveId(null);
+                setMessages([]);
+            }
+        }
+        window.addEventListener("hashchange", onHashChange);
+        return () => window.removeEventListener("hashchange", onHashChange);
+    }, [activeId]);
+
     useEffect(() => {
         if (activeId && messages.length > 0) {
             const session = sessions.find((s) => s.id === activeId);
@@ -115,6 +161,7 @@ export function ChatLayout() {
         saveSession(session);
         setActiveId(id);
         setMessages([]);
+        window.history.pushState(null, "", `#${id}`);
         inputRef.current?.focus();
     }
 
@@ -123,6 +170,7 @@ export function ChatLayout() {
         if (session) {
             setActiveId(id);
             setMessages(session.messages as Message[]);
+            window.history.pushState(null, "", `#${id}`);
         }
     }
 
@@ -470,84 +518,80 @@ export function ChatLayout() {
                     </div>
 
                     {/* Input */}
-                    <div className="mx-auto max-w-3xl px-6 py-3">
+                    <div className="mx-auto w-full max-w-3xl px-6 py-3">
                         <form
                             onSubmit={handleSubmit}
-                            className="mx-auto max-w-3xl rounded-2xl bg-muted/50 px-4 py-2"
+                            className="flex items-center gap-2 rounded-2xl border bg-muted/50 px-4 py-2"
                         >
-                            <div className="flex items-center gap-2">
-                                <input
-                                    ref={inputRef}
-                                    value={input}
-                                    onChange={(e) => setInput(e.target.value)}
-                                    placeholder="Ketik pertanyaan..."
-                                    disabled={isLoading}
-                                    className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none disabled:opacity-50"
-                                    autoFocus
-                                />
-                                <Button
-                                    type="submit"
-                                    size="icon-sm"
-                                    className="shrink-0 rounded-full"
-                                    disabled={isLoading || !input.trim()}
+                            <input
+                                ref={inputRef}
+                                value={input}
+                                onChange={(e) => setInput(e.target.value)}
+                                placeholder="Ketik pertanyaan..."
+                                disabled={isLoading}
+                                className="min-w-0 flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none disabled:opacity-50"
+                                autoFocus
+                            />
+                            <DropdownMenu>
+                                <DropdownMenuTrigger className="inline-flex h-7 shrink-0 items-center gap-1 rounded-full border border-border bg-transparent px-2.5 text-[10px] text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-accent-foreground">
+                                    {LESSON_LABELS[lessonFilter]}
+                                    <ChevronDown className="size-3" />
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent
+                                    align="end"
+                                    className="min-w-[180px]"
                                 >
-                                    <Send className="size-4" />
-                                </Button>
-                            </div>
-                            <div className="mt-1.5 flex items-center gap-1.5">
-                                <DropdownMenu>
-                                    <DropdownMenuTrigger className="inline-flex h-6 items-center gap-1 rounded-full border border-border bg-transparent px-2.5 text-[10px] text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-accent-foreground">
-                                        {LESSON_LABELS[lessonFilter]}
-                                        <ChevronDown className="size-3" />
-                                    </DropdownMenuTrigger>
-                                    <DropdownMenuContent
-                                        align="start"
-                                        className="min-w-[180px]"
+                                    <DropdownMenuRadioGroup
+                                        value={lessonFilter}
+                                        onValueChange={setLessonFilter}
                                     >
-                                        <DropdownMenuRadioGroup
-                                            value={lessonFilter}
-                                            onValueChange={setLessonFilter}
-                                        >
-                                            {Object.entries(LESSON_LABELS).map(
-                                                ([value, label]) => (
-                                                    <DropdownMenuRadioItem
-                                                        key={value}
-                                                        value={value}
-                                                    >
-                                                        {label}
-                                                    </DropdownMenuRadioItem>
-                                                ),
-                                            )}
-                                        </DropdownMenuRadioGroup>
-                                    </DropdownMenuContent>
-                                </DropdownMenu>
-                                <DropdownMenu>
-                                    <DropdownMenuTrigger className="inline-flex h-6 items-center gap-1 rounded-full border border-border bg-transparent px-2.5 text-[10px] text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-accent-foreground">
-                                        {SECTION_LABELS[sectionFilter]}
-                                        <ChevronDown className="size-3" />
-                                    </DropdownMenuTrigger>
-                                    <DropdownMenuContent
-                                        align="start"
-                                        className="min-w-[160px]"
+                                        {Object.entries(LESSON_LABELS).map(
+                                            ([value, label]) => (
+                                                <DropdownMenuRadioItem
+                                                    key={value}
+                                                    value={value}
+                                                >
+                                                    {label}
+                                                </DropdownMenuRadioItem>
+                                            ),
+                                        )}
+                                    </DropdownMenuRadioGroup>
+                                </DropdownMenuContent>
+                            </DropdownMenu>
+                            <DropdownMenu>
+                                <DropdownMenuTrigger className="inline-flex h-7 shrink-0 items-center gap-1 rounded-full border border-border bg-transparent px-2.5 text-[10px] text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-accent-foreground">
+                                    {SECTION_LABELS[sectionFilter]}
+                                    <ChevronDown className="size-3" />
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent
+                                    align="end"
+                                    className="min-w-[160px]"
+                                >
+                                    <DropdownMenuRadioGroup
+                                        value={sectionFilter}
+                                        onValueChange={setSectionFilter}
                                     >
-                                        <DropdownMenuRadioGroup
-                                            value={sectionFilter}
-                                            onValueChange={setSectionFilter}
-                                        >
-                                            {Object.entries(SECTION_LABELS).map(
-                                                ([value, label]) => (
-                                                    <DropdownMenuRadioItem
-                                                        key={value}
-                                                        value={value}
-                                                    >
-                                                        {label}
-                                                    </DropdownMenuRadioItem>
-                                                ),
-                                            )}
-                                        </DropdownMenuRadioGroup>
-                                    </DropdownMenuContent>
-                                </DropdownMenu>
-                            </div>
+                                        {Object.entries(SECTION_LABELS).map(
+                                            ([value, label]) => (
+                                                <DropdownMenuRadioItem
+                                                    key={value}
+                                                    value={value}
+                                                >
+                                                    {label}
+                                                </DropdownMenuRadioItem>
+                                            ),
+                                        )}
+                                    </DropdownMenuRadioGroup>
+                                </DropdownMenuContent>
+                            </DropdownMenu>
+                            <Button
+                                type="submit"
+                                size="icon-sm"
+                                className="shrink-0 rounded-full"
+                                disabled={isLoading || !input.trim()}
+                            >
+                                <Send className="size-4" />
+                            </Button>
                         </form>
                     </div>
                 </div>

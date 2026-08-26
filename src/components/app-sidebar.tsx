@@ -1,5 +1,16 @@
 import { useState } from "react";
-import { Plus, Trash2, MessageSquare } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
+import { toast } from "@/components/ui/toast";
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
     Sidebar,
     SidebarContent,
@@ -33,6 +44,7 @@ export function AppSidebar({
     onDelete,
 }: AppSidebarProps) {
     const [search, setSearch] = useState("");
+    const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
 
     const filtered = sessions.filter((s) =>
         s.title.toLowerCase().includes(search.toLowerCase()),
@@ -66,66 +78,110 @@ export function AppSidebar({
         groups.push({ label: "7 Days Ago", items: weekItems });
     if (olderItems.length) groups.push({ label: "Older", items: olderItems });
 
+    function confirmDelete() {
+        if (deleteTarget) {
+            onDelete(deleteTarget);
+            toast.add({ title: "Chat deleted", type: "success" });
+            setDeleteTarget(null);
+        }
+    }
+
     return (
-        <Sidebar collapsible="offcanvas">
-            <SidebarHeader>
-                <SidebarMenu>
-                    <SidebarMenuItem>
-                        <SidebarMenuButton onClick={onNew} tooltip="New Chat">
-                            <Plus className="size-4" />
-                            <span>New Chat</span>
-                        </SidebarMenuButton>
-                    </SidebarMenuItem>
-                </SidebarMenu>
-                <SidebarInput
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    placeholder="Search chats..."
-                />
-            </SidebarHeader>
+        <>
+            <Sidebar collapsible="offcanvas">
+                <SidebarHeader>
+                    <SidebarMenu>
+                        <SidebarMenuItem>
+                            <SidebarMenuButton
+                                onClick={onNew}
+                                tooltip="New Chat"
+                            >
+                                <Plus className="size-4" />
+                                <span>New Chat</span>
+                            </SidebarMenuButton>
+                        </SidebarMenuItem>
+                    </SidebarMenu>
+                    <SidebarInput
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
+                        placeholder="Search chats..."
+                    />
+                </SidebarHeader>
 
-            <SidebarContent>
-                {groups.map((group) => (
-                    <SidebarGroup key={group.label}>
-                        <SidebarGroupLabel>{group.label}</SidebarGroupLabel>
-                        <SidebarGroupContent>
-                            <SidebarMenu>
-                                {group.items.map((session) => (
-                                    <SidebarMenuItem key={session.id}>
-                                        <SidebarMenuButton
-                                            onClick={() => onSelect(session.id)}
-                                            isActive={session.id === activeId}
-                                            tooltip={session.title}
-                                        >
-                                            <MessageSquare className="size-4" />
-                                            <span>{session.title}</span>
-                                        </SidebarMenuButton>
-                                        <SidebarMenuAction
-                                            onClick={() => onDelete(session.id)}
-                                            showOnHover
-                                        >
-                                            <Trash2 className="size-4" />
-                                            <span className="sr-only">
-                                                Delete
-                                            </span>
-                                        </SidebarMenuAction>
-                                    </SidebarMenuItem>
-                                ))}
-                            </SidebarMenu>
-                        </SidebarGroupContent>
-                    </SidebarGroup>
-                ))}
+                <SidebarContent>
+                    {groups.map((group) => (
+                        <SidebarGroup key={group.label}>
+                            <SidebarGroupLabel>{group.label}</SidebarGroupLabel>
+                            <SidebarGroupContent>
+                                <SidebarMenu>
+                                    {group.items.map((session) => (
+                                        <SidebarMenuItem key={session.id}>
+                                            <SidebarMenuButton
+                                                onClick={() =>
+                                                    onSelect(session.id)
+                                                }
+                                                isActive={
+                                                    session.id === activeId
+                                                }
+                                                tooltip={session.title}
+                                            >
+                                                <span>{session.title}</span>
+                                            </SidebarMenuButton>
+                                            <SidebarMenuAction
+                                                onClick={() =>
+                                                    setDeleteTarget(session.id)
+                                                }
+                                                showOnHover
+                                            >
+                                                <Trash2 className="size-4" />
+                                                <span className="sr-only">
+                                                    Delete
+                                                </span>
+                                            </SidebarMenuAction>
+                                        </SidebarMenuItem>
+                                    ))}
+                                </SidebarMenu>
+                            </SidebarGroupContent>
+                        </SidebarGroup>
+                    ))}
 
-                {filtered.length === 0 && (
-                    <div className="px-4 py-8 text-center text-xs text-muted-foreground">
-                        {search ? "No chats found" : "No chat history yet"}
-                    </div>
-                )}
-            </SidebarContent>
+                    {filtered.length === 0 && (
+                        <div className="px-4 py-8 text-center text-xs text-muted-foreground">
+                            {search ? "No chats found" : "No chat history yet"}
+                        </div>
+                    )}
+                </SidebarContent>
 
-            <SidebarFooter>
-                <ThemeToggle />
-            </SidebarFooter>
-        </Sidebar>
+                <SidebarFooter>
+                    <ThemeToggle />
+                </SidebarFooter>
+            </Sidebar>
+
+            <AlertDialog
+                open={deleteTarget !== null}
+                onOpenChange={(open) => {
+                    if (!open) setDeleteTarget(null);
+                }}
+            >
+                <AlertDialogContent size="sm">
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Delete chat?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            This will permanently delete this conversation. This
+                            action cannot be undone.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                            variant="destructive"
+                            onClick={confirmDelete}
+                        >
+                            Delete
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+        </>
     );
 }
