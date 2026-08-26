@@ -38,6 +38,7 @@ async function proxyRequest(req, res, targetPath) {
     }
 
     try {
+        console.log(`[Proxy] ${req.method} ${url}`);
         const response = await fetch(url, fetchOptions);
 
         // Forward status and headers
