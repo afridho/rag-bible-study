@@ -10,13 +10,19 @@ app.use("/api", express.json());
 
 // Proxy /api/verses/* → backend /api/bible/verses/*
 app.all("/api/verses/{*splat}", async (req, res) => {
-    const targetPath = `/api/bible/verses/${req.params.splat}`;
+    const splat = Array.isArray(req.params.splat)
+        ? req.params.splat.join("/")
+        : req.params.splat;
+    const targetPath = `/api/bible/verses/${splat}`;
     await proxyRequest(req, res, targetPath);
 });
 
 // Proxy /api/* → backend /api/bible/bible-study/*
 app.all("/api/{*splat}", async (req, res) => {
-    const targetPath = `/api/bible/bible-study/${req.params.splat}`;
+    const splat = Array.isArray(req.params.splat)
+        ? req.params.splat.join("/")
+        : req.params.splat;
+    const targetPath = `/api/bible/bible-study/${splat}`;
     await proxyRequest(req, res, targetPath);
 });
 
