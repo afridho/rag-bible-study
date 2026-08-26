@@ -58,7 +58,8 @@ export function VerseLink({ reference }: VerseLinkProps) {
         setError(null);
 
         try {
-            const url = `/api/verses/${encodeURIComponent(parsed.book)}/${parsed.chapter}/${parsed.verse}`;
+            const base = `${import.meta.env.VITE_API_URL || "http://localhost:3300"}/api/bible/verses`;
+            const url = `${base}/${encodeURIComponent(parsed.book)}/${parsed.chapter}/${parsed.verse}`;
             const res = await fetch(url);
             const data = await res.json();
 
