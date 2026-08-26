@@ -40,3 +40,14 @@ export function deleteSession(id: string) {
 export function generateId(): string {
     return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 }
+
+// Nickname storage
+const NICKNAME_KEY = "bible-study-nickname";
+
+export function getNickname(): string | null {
+    return localStorage.getItem(NICKNAME_KEY);
+}
+
+export function setNickname(name: string) {
+    localStorage.setItem(NICKNAME_KEY, name);
+}

@@ -34,6 +34,8 @@ interface AppSidebarProps {
     onSelect: (id: string) => void;
     onNew: () => void;
     onDelete: (id: string) => void;
+    nickname: string | null;
+    onChangeNickname: () => void;
 }
 
 export function AppSidebar({
@@ -42,6 +44,8 @@ export function AppSidebar({
     onSelect,
     onNew,
     onDelete,
+    nickname,
+    onChangeNickname,
 }: AppSidebarProps) {
     const [search, setSearch] = useState("");
     const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
@@ -153,6 +157,15 @@ export function AppSidebar({
                 </SidebarContent>
 
                 <SidebarFooter>
+                    {nickname && (
+                        <button
+                            onClick={onChangeNickname}
+                            className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-xs text-muted-foreground transition-colors hover:bg-accent"
+                        >
+                            <span>👋 Halo, {nickname}</span>
+                            <span className="text-[10px] opacity-60">Edit</span>
+                        </button>
+                    )}
                     <ThemeToggle />
                 </SidebarFooter>
             </Sidebar>
