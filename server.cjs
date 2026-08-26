@@ -1,38 +1,89 @@
 const express = require("express");
-const { createProxyMiddleware } = require("http-proxy-middleware");
 const path = require("path");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 const API_URL = process.env.API_URL || "http://localhost:3300";
 
-// Proxy /api/verses → backend /api/bible/verses
-app.use(
-    "/api/verses",
-    createProxyMiddleware({
-        target: API_URL,
-        changeOrigin: true,
-        pathRewrite: { "^/api/verses": "/api/bible/verses" },
-    }),
-);
+// Parse JSON bodies for proxy forwarding
+app.use("/api", express.json());
 
-// Proxy /api → backend /api/bible/bible-study
-app.use(
-    "/api",
-    createProxyMiddleware({
-        target: API_URL,
-        changeOrigin: true,
-        pathRewrite: { "^/api": "/api/bible/bible-study" },
-        followRedirects: false,
-    }),
-);
+// Proxy /api/verses/* → backend /api/bible/verses/*
+app.all("/api/verses/{*splat}", async (req, res) => {
+    const targetPath = `/api/bible/verses/${req.params.splat}`;
+    await proxyRequest(req, res, targetPath);
+});
+
+// Proxy /api/* → backend /api/bible/bible-study/*
+app.all("/api/{*splat}", async (req, res) => {
+    const targetPath = `/api/bible/bible-study/${req.params.splat}`;
+    await proxyRequest(req, res, targetPath);
+});
+
+async function proxyRequest(req, res, targetPath) {
+    const url = `${API_URL}${targetPath}`;
+    const headers = { ...req.headers };
+
+    // Remove hop-by-hop headers
+    delete headers.host;
+    delete headers.connection;
+
+    const fetchOptions = {
+        method: req.method,
+        headers,
+    };
+
+    if (req.method !== "GET" && req.method !== "HEAD" && req.body) {
+        fetchOptions.body = JSON.stringify(req.body);
+    }
+
+    try {
+        const response = await fetch(url, fetchOptions);
+
+        // Forward status and headers
+        res.status(response.status);
+        for (const [key, value] of response.headers.entries()) {
+            if (
+                key.toLowerCase() !== "transfer-encoding" &&
+                key.toLowerCase() !== "connection"
+            ) {
+                res.setHeader(key, value);
+            }
+        }
+
+        // Stream the response body
+        if (response.body) {
+            const reader = response.body.getReader();
+            const push = async () => {
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) {
+                        res.end();
+                        break;
+                    }
+                    res.write(value);
+                }
+            };
+            await push();
+        } else {
+            res.end();
+        }
+    } catch (err) {
+        console.error("[Proxy Error]", err.message);
+        if (!res.headersSent) {
+            res.status(502).json({
+                error: "Bad Gateway",
+                message: err.message,
+            });
+        }
+    }
+}
 
 // Serve static files from Vite build
 app.use(express.static(path.join(__dirname, "dist")));
 
-// SPA fallback — only for non-API, non-static requests
+// SPA fallback
 app.use((req, res, next) => {
-    // Don't serve index.html for API routes (shouldn't reach here, but safety)
     if (req.path.startsWith("/api")) return next();
     res.sendFile(path.join(__dirname, "dist", "index.html"));
 });
