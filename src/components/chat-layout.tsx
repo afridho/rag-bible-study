@@ -82,6 +82,7 @@ export function ChatLayout() {
     const [lightboxSlides, setLightboxSlides] = useState<{ src: string }[]>([]);
     const scrollRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
+    const abortRef = useRef<AbortController | null>(null);
 
     // Sync activeId from URL hash on mount
     useEffect(() => {
@@ -223,10 +224,14 @@ export function ChatLayout() {
             if (lessonFilter) body.lesson = parseInt(lessonFilter);
             if (sectionFilter) body.section_type = sectionFilter;
 
+            const controller = new AbortController();
+            abortRef.current = controller;
+
             const res = await fetch(`${API_BASE}/query/stream`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(body),
+                signal: controller.signal,
             });
 
             if (!res.ok) {
@@ -302,7 +307,15 @@ export function ChatLayout() {
             ]);
         } finally {
             setIsLoading(false);
+            abortRef.current = null;
             inputRef.current?.focus();
+        }
+    }
+
+    function handleStop() {
+        if (abortRef.current) {
+            abortRef.current.abort();
+            abortRef.current = null;
         }
     }
 
@@ -670,14 +683,38 @@ export function ChatLayout() {
                                     </DropdownMenuRadioGroup>
                                 </DropdownMenuContent>
                             </DropdownMenu>
-                            <Button
-                                type="submit"
-                                size="icon-sm"
-                                className="shrink-0 rounded-full"
-                                disabled={isLoading || !input.trim()}
-                            >
-                                <Send className="size-4" />
-                            </Button>
+                            {isLoading ? (
+                                <Button
+                                    type="button"
+                                    size="icon-sm"
+                                    variant="destructive"
+                                    className="shrink-0 rounded-full"
+                                    onClick={handleStop}
+                                >
+                                    <svg
+                                        className="size-4"
+                                        viewBox="0 0 24 24"
+                                        fill="currentColor"
+                                    >
+                                        <rect
+                                            x="6"
+                                            y="6"
+                                            width="12"
+                                            height="12"
+                                            rx="2"
+                                        />
+                                    </svg>
+                                </Button>
+                            ) : (
+                                <Button
+                                    type="submit"
+                                    size="icon-sm"
+                                    className="shrink-0 rounded-full"
+                                    disabled={!input.trim()}
+                                >
+                                    <Send className="size-4" />
+                                </Button>
+                            )}
                         </form>
                     </div>
                 </div>
