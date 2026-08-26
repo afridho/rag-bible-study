@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect, type FormEvent } from "react";
-import { Send, Loader2, BookOpen, SquarePen, ChevronDown } from "lucide-react";
+import { Send, Loader2, SquarePen, ChevronDown } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { DotLottieReact } from "@lottiefiles/dotlottie-react";
 import Lightbox from "yet-another-react-lightbox";
 import "yet-another-react-lightbox/styles.css";
 import { cn } from "@/lib/utils";
@@ -29,30 +30,30 @@ import {
 
 const API_BASE = import.meta.env.VITE_API_URL || "/api";
 
-const LESSON_LABELS: Record<string, string> = {
-    "": "Semua Pelajaran",
-    "1": "1 - Mencari Tuhan",
-    "2": "2 - Firman Tuhan",
-    "3": "3 - Pemuridan",
-    "4": "4 - Dosa",
-    "5": "5 - Pertobatan",
-    "6": "6 - Salib",
-    "7": "7 - Baptisan",
-    "8": "8 - Jemaat/Gereja",
-    "9": "9 - Roh Kudus",
-};
+const LESSON_LABELS: [string, string][] = [
+    ["", "Semua Pelajaran"],
+    ["1", "1 - Mencari Tuhan"],
+    ["2", "2 - Firman Tuhan"],
+    ["3", "3 - Pemuridan"],
+    ["4", "4 - Dosa"],
+    ["5", "5 - Pertobatan"],
+    ["6", "6 - Salib"],
+    ["7", "7 - Baptisan"],
+    ["8", "8 - Jemaat/Gereja"],
+    ["9", "9 - Roh Kudus"],
+];
 
-const SECTION_LABELS: Record<string, string> = {
-    "": "Semua Section",
-    objectives: "Tujuan",
-    tips: "Tips",
-    verses: "Ayat",
-    keywords: "Kata Kunci",
-    questions: "Pertanyaan",
-    application: "Aplikasi",
-    illustrations: "Ilustrasi",
-    general: "Umum",
-};
+const SECTION_LABELS: [string, string][] = [
+    ["", "Semua Section"],
+    ["objectives", "Tujuan"],
+    ["tips", "Tips"],
+    ["verses", "Ayat"],
+    ["keywords", "Kata Kunci"],
+    ["questions", "Pertanyaan"],
+    ["application", "Aplikasi"],
+    ["illustrations", "Ilustrasi"],
+    ["general", "Umum"],
+];
 
 interface Source {
     document_id: string;
@@ -80,19 +81,32 @@ export function ChatLayout() {
     const [lightboxOpen, setLightboxOpen] = useState(false);
     const [lightboxIndex, setLightboxIndex] = useState(0);
     const [lightboxSlides, setLightboxSlides] = useState<{ src: string }[]>([]);
+    const [suggestions, setSuggestions] = useState<string[]>([]);
     const scrollRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
     const abortRef = useRef<AbortController | null>(null);
 
     // Sync activeId from URL hash on mount
     useEffect(() => {
+        // Fetch suggestions for empty state
+        fetch(`${API_BASE}/suggestions`)
+            .then((r) => r.json())
+            .then((data) => {
+                if (data.success) setSuggestions(data.data);
+            })
+            .catch(() => {});
+
         const hash = window.location.hash.slice(1);
         if (hash) {
             const allSessions = getSessions();
             const found = allSessions.find((s) => s.id === hash);
             if (found) {
                 setActiveId(found.id);
-                setMessages(found.messages as Message[]);
+                setMessages(
+                    (found.messages as Message[]).filter(
+                        (m) => m.role === "user" || m.content,
+                    ),
+                );
             } else {
                 window.history.replaceState(null, "", window.location.pathname);
             }
@@ -176,7 +190,11 @@ export function ChatLayout() {
         const session = sessions.find((s) => s.id === id);
         if (session) {
             setActiveId(id);
-            setMessages(session.messages as Message[]);
+            setMessages(
+                (session.messages as Message[]).filter(
+                    (m) => m.role === "user" || m.content,
+                ),
+            );
             window.history.pushState(null, "", `#${id}`);
         }
     }
@@ -298,13 +316,18 @@ export function ChatLayout() {
                 }
             }
         } catch (err) {
-            setMessages((prev) => [
-                ...prev.filter((m) => m.content !== ""),
-                {
-                    role: "assistant",
-                    content: `❌ Error: ${(err as Error).message}`,
-                },
-            ]);
+            // Don't show error message for user-initiated abort
+            if ((err as Error).name === "AbortError") {
+                setMessages((prev) => prev.filter((m) => m.content !== ""));
+            } else {
+                setMessages((prev) => [
+                    ...prev.filter((m) => m.content !== ""),
+                    {
+                        role: "assistant",
+                        content: `❌ Error: ${(err as Error).message}`,
+                    },
+                ]);
+            }
         } finally {
             setIsLoading(false);
             abortRef.current = null;
@@ -317,6 +340,15 @@ export function ChatLayout() {
             abortRef.current.abort();
             abortRef.current = null;
         }
+    }
+
+    function handleSuggestionClick(text: string) {
+        setInput(text);
+        // Trigger submit programmatically
+        setTimeout(() => {
+            const form = document.querySelector("form");
+            if (form) form.requestSubmit();
+        }, 0);
     }
 
     /**
@@ -379,15 +411,56 @@ export function ChatLayout() {
                             <div className="mx-auto max-w-3xl space-y-4 px-6 pt-16 pb-6">
                                 {messages.length === 0 && (
                                     <div className="flex flex-col items-center justify-center py-20 text-center">
-                                        <BookOpen className="mb-4 h-12 w-12 text-muted-foreground/50" />
+                                        <DotLottieReact
+                                            src="/book.lottie"
+                                            autoplay
+                                            loop={false}
+                                            dotLottieRefCallback={(
+                                                dotLottie,
+                                            ) => {
+                                                if (!dotLottie) return;
+                                                let count = 0;
+                                                dotLottie.addEventListener(
+                                                    "complete",
+                                                    () => {
+                                                        count++;
+                                                        if (count < 1) {
+                                                            dotLottie.play();
+                                                        } else {
+                                                            setTimeout(() => {
+                                                                count = 0;
+                                                                dotLottie.play();
+                                                            }, 10000);
+                                                        }
+                                                    },
+                                                );
+                                            }}
+                                            className="mb-4 h-48 w-48"
+                                        />
                                         <h2 className="mb-2 text-lg font-medium">
-                                            {/* Bible Study  */}
                                             RAG
                                         </h2>
                                         <p className="max-w-md text-sm text-muted-foreground">
                                             Tanyakan apa saja tentang kurikulum
                                             "Pelajaran Dasar-Dasar Utama".
                                         </p>
+                                        {suggestions.length > 0 && (
+                                            <div className="mt-6 flex flex-wrap justify-center gap-2">
+                                                {suggestions.map((s, i) => (
+                                                    <button
+                                                        key={i}
+                                                        onClick={() =>
+                                                            handleSuggestionClick(
+                                                                s,
+                                                            )
+                                                        }
+                                                        className="rounded-full border border-border bg-background px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+                                                    >
+                                                        {s}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        )}
                                     </div>
                                 )}
 
@@ -633,7 +706,11 @@ export function ChatLayout() {
                             />
                             <DropdownMenu>
                                 <DropdownMenuTrigger className="inline-flex h-7 shrink-0 items-center gap-1 rounded-full border border-border bg-transparent px-2.5 text-[10px] text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-accent-foreground">
-                                    {LESSON_LABELS[lessonFilter]}
+                                    {
+                                        LESSON_LABELS.find(
+                                            ([v]) => v === lessonFilter,
+                                        )?.[1]
+                                    }
                                     <ChevronDown className="size-3" />
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent
@@ -644,22 +721,24 @@ export function ChatLayout() {
                                         value={lessonFilter}
                                         onValueChange={setLessonFilter}
                                     >
-                                        {Object.entries(LESSON_LABELS).map(
-                                            ([value, label]) => (
-                                                <DropdownMenuRadioItem
-                                                    key={value}
-                                                    value={value}
-                                                >
-                                                    {label}
-                                                </DropdownMenuRadioItem>
-                                            ),
-                                        )}
+                                        {LESSON_LABELS.map(([value, label]) => (
+                                            <DropdownMenuRadioItem
+                                                key={value}
+                                                value={value}
+                                            >
+                                                {label}
+                                            </DropdownMenuRadioItem>
+                                        ))}
                                     </DropdownMenuRadioGroup>
                                 </DropdownMenuContent>
                             </DropdownMenu>
                             <DropdownMenu>
                                 <DropdownMenuTrigger className="inline-flex h-7 shrink-0 items-center gap-1 rounded-full border border-border bg-transparent px-2.5 text-[10px] text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-accent-foreground">
-                                    {SECTION_LABELS[sectionFilter]}
+                                    {
+                                        SECTION_LABELS.find(
+                                            ([v]) => v === sectionFilter,
+                                        )?.[1]
+                                    }
                                     <ChevronDown className="size-3" />
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent
@@ -670,7 +749,7 @@ export function ChatLayout() {
                                         value={sectionFilter}
                                         onValueChange={setSectionFilter}
                                     >
-                                        {Object.entries(SECTION_LABELS).map(
+                                        {SECTION_LABELS.map(
                                             ([value, label]) => (
                                                 <DropdownMenuRadioItem
                                                     key={value}
