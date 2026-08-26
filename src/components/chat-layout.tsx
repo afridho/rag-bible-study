@@ -540,7 +540,10 @@ export function ChatLayout() {
                                                             : "bg-muted text-muted-foreground",
                                                     )}
                                                 >
-                                                    {isUser ? "U" : "📖"}
+                                                    {isUser
+                                                        ? nickname?.[0]?.toUpperCase() ||
+                                                          "U"
+                                                        : "📖"}
                                                 </div>
                                             </div>
                                             <div
