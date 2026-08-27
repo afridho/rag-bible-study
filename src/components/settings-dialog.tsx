@@ -78,8 +78,6 @@ export function SettingsDialog({
                         />
                     </div>
 
-                    {/* Add more settings here in the future */}
-
                     <DialogFooter>
                         <Button type="submit" disabled={!value.trim()}>
                             Simpan

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Plus, Trash2, Settings } from "lucide-react";
+import { Plus, Trash2, MoreHorizontal, User, ShieldCheck } from "lucide-react";
 import { toast } from "@/components/ui/toast";
 import {
     AlertDialog,
@@ -11,6 +11,12 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
     Sidebar,
     SidebarContent,
@@ -155,14 +161,34 @@ export function AppSidebar({
                 </SidebarContent>
 
                 <SidebarFooter>
-                    <button
-                        onClick={onOpenSettings}
-                        className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
-                    >
-                        <Settings className="size-4" />
-                        <span>Settings</span>
-                    </button>
-                    <ThemeToggle />
+                    <div className="flex items-center gap-2">
+                        <div className="min-w-0 flex-1">
+                            <ThemeToggle />
+                        </div>
+                        <DropdownMenu>
+                            <DropdownMenuTrigger className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-border text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-accent-foreground">
+                                <MoreHorizontal className="size-4" />
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent
+                                align="end"
+                                side="top"
+                                className="min-w-[160px]"
+                            >
+                                <DropdownMenuItem onClick={onOpenSettings}>
+                                    <User className="size-4" />
+                                    Nickname
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                    onClick={() => {
+                                        window.location.href = "/admin";
+                                    }}
+                                >
+                                    <ShieldCheck className="size-4" />
+                                    Visit Admin
+                                </DropdownMenuItem>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+                    </div>
                 </SidebarFooter>
             </Sidebar>
 

@@ -1,5 +1,29 @@
 const API_BASE = `${import.meta.env.VITE_API_URL || "http://localhost:3300"}/api/bible/bible-study`;
 
+const AUTH_KEY = "bible-admin-auth";
+
+/** Store base64-encoded "user:pass" credentials for admin requests. */
+export function setAdminCredentials(user: string, pass: string) {
+    sessionStorage.setItem(AUTH_KEY, btoa(`${user}:${pass}`));
+}
+
+export function getAdminAuthHeader(): Record<string, string> {
+    const token = sessionStorage.getItem(AUTH_KEY);
+    return token ? { Authorization: `Basic ${token}` } : {};
+}
+
+export function clearAdminCredentials() {
+    sessionStorage.removeItem(AUTH_KEY);
+}
+
+/** Thrown when the server rejects credentials (401). */
+export class UnauthorizedError extends Error {
+    constructor() {
+        super("Unauthorized");
+        this.name = "UnauthorizedError";
+    }
+}
+
 export interface DocumentImage {
     url: string;
     public_id: string;
@@ -58,7 +82,10 @@ export async function listDocuments(params: {
     if (params.page) q.set("page", String(params.page));
     if (params.limit) q.set("limit", String(params.limit));
 
-    const res = await fetch(`${API_BASE}/documents?${q.toString()}`);
+    const res = await fetch(`${API_BASE}/documents?${q.toString()}`, {
+        headers: getAdminAuthHeader(),
+    });
+    if (res.status === 401) throw new UnauthorizedError();
     if (!res.ok) throw new Error("Failed to fetch documents");
     return res.json();
 }
@@ -68,9 +95,13 @@ export async function createDocument(
 ): Promise<BibleDocument> {
     const res = await fetch(`${API_BASE}/documents`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+            "Content-Type": "application/json",
+            ...getAdminAuthHeader(),
+        },
         body: JSON.stringify(doc),
     });
+    if (res.status === 401) throw new UnauthorizedError();
     if (!res.ok) {
         const err = await res.json();
         throw new Error(err.error || "Failed to create document");
@@ -85,9 +116,13 @@ export async function updateDocument(
 ): Promise<void> {
     const res = await fetch(`${API_BASE}/documents/${id}`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+            "Content-Type": "application/json",
+            ...getAdminAuthHeader(),
+        },
         body: JSON.stringify(doc),
     });
+    if (res.status === 401) throw new UnauthorizedError();
     if (!res.ok) {
         const err = await res.json();
         throw new Error(err.error || "Failed to update document");
@@ -97,7 +132,9 @@ export async function updateDocument(
 export async function deleteDocument(id: string): Promise<void> {
     const res = await fetch(`${API_BASE}/documents/${id}`, {
         method: "DELETE",
+        headers: getAdminAuthHeader(),
     });
+    if (res.status === 401) throw new UnauthorizedError();
     if (!res.ok) {
         const err = await res.json();
         throw new Error(err.error || "Failed to delete document");
@@ -118,7 +155,11 @@ export async function getStatus(): Promise<{
 }
 
 export async function triggerIngest(): Promise<void> {
-    const res = await fetch(`${API_BASE}/ingest`, { method: "POST" });
+    const res = await fetch(`${API_BASE}/ingest`, {
+        method: "POST",
+        headers: getAdminAuthHeader(),
+    });
+    if (res.status === 401) throw new UnauthorizedError();
     if (!res.ok) {
         const err = await res.json();
         throw new Error(err.error || "Failed to ingest");
@@ -134,8 +175,10 @@ export async function uploadImages(
 
     const res = await fetch(`${API_BASE}/documents/${id}/images`, {
         method: "POST",
+        headers: getAdminAuthHeader(),
         body: form,
     });
+    if (res.status === 401) throw new UnauthorizedError();
     if (!res.ok) {
         const err = await res.json();
         throw new Error(err.error || "Failed to upload images");
@@ -147,9 +190,13 @@ export async function uploadImages(
 export async function deleteImage(id: string, publicId: string): Promise<void> {
     const res = await fetch(`${API_BASE}/documents/${id}/images`, {
         method: "DELETE",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+            "Content-Type": "application/json",
+            ...getAdminAuthHeader(),
+        },
         body: JSON.stringify({ public_id: publicId }),
     });
+    if (res.status === 401) throw new UnauthorizedError();
     if (!res.ok) {
         const err = await res.json();
         throw new Error(err.error || "Failed to delete image");

@@ -6,6 +6,7 @@ import {
     RefreshCw,
     ArrowLeft,
     Database,
+    LogOut,
 } from "lucide-react";
 import { toast } from "@/components/ui/toast";
 import { Button } from "@/components/ui/button";
@@ -30,6 +31,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { ChevronDown } from "lucide-react";
 import { DocumentForm } from "@/components/admin/document-form";
+import { AdminLogin } from "@/components/admin/admin-login";
 import {
     type BibleDocument,
     type DocumentInput,
@@ -40,6 +42,8 @@ import {
     deleteDocument,
     getStatus,
     triggerIngest,
+    clearAdminCredentials,
+    UnauthorizedError,
 } from "@/lib/admin-api";
 
 const LESSON_LABELS: [string, string][] = [
@@ -80,6 +84,8 @@ export function AdminPage() {
         null,
     );
     const [ingesting, setIngesting] = useState(false);
+    const [authed, setAuthed] = useState(false);
+    const [authError, setAuthError] = useState<string | undefined>(undefined);
     const [status, setStatus] = useState<{
         totalDocuments: number;
         indexedDocuments: number;
@@ -97,8 +103,15 @@ export function AdminPage() {
             });
             setDocuments(res.documents);
             setPagination(res.pagination);
-        } catch {
-            toast.add({ title: "Gagal memuat dokumen", type: "error" });
+            setAuthed(true);
+        } catch (err) {
+            if (err instanceof UnauthorizedError) {
+                clearAdminCredentials();
+                setAuthed(false);
+                setAuthError("Kredensial salah. Coba lagi.");
+            } else {
+                toast.add({ title: "Gagal memuat dokumen", type: "error" });
+            }
         } finally {
             setLoading(false);
         }
@@ -168,6 +181,27 @@ export function AdminPage() {
         }
     }
 
+    function handleLogout() {
+        clearAdminCredentials();
+        setAuthed(false);
+        setAuthError(undefined);
+        setDocuments([]);
+    }
+
+    // Show login gate until authenticated
+    if (!authed) {
+        return (
+            <AdminLogin
+                error={authError}
+                onSuccess={() => {
+                    setAuthError(undefined);
+                    void loadDocuments();
+                    void loadStatus();
+                }}
+            />
+        );
+    }
+
     return (
         <div className="min-h-svh bg-background text-foreground">
             <div className="mx-auto max-w-5xl px-6 py-6">
@@ -213,6 +247,14 @@ export function AdminPage() {
                         >
                             <Plus className="size-4" />
                             Tambah
+                        </Button>
+                        <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            onClick={handleLogout}
+                            title="Logout"
+                        >
+                            <LogOut className="size-4" />
                         </Button>
                     </div>
                 </div>

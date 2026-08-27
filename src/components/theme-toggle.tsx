@@ -26,9 +26,6 @@ export function ThemeToggle() {
                     title={label}
                 >
                     <Icon className="size-3.5" />
-                    <span className="hidden group-data-[state=expanded]:inline">
-                        {label}
-                    </span>
                 </button>
             ))}
         </div>
