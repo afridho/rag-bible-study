@@ -7,9 +7,13 @@ import {
     ArrowLeft,
     Database,
     LogOut,
+    ImageIcon,
+    Search,
+    X,
 } from "lucide-react";
 import { toast } from "@/components/ui/toast";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -110,6 +114,9 @@ export function AdminPage() {
     const [page, setPage] = useState(1);
     const [lessonFilter, setLessonFilter] = useState("");
     const [sectionFilter, setSectionFilter] = useState("");
+    // searchInput = live input value; search = debounced value used for fetching
+    const [searchInput, setSearchInput] = useState("");
+    const [search, setSearch] = useState("");
     const [formOpen, setFormOpen] = useState(false);
     const [editing, setEditing] = useState<BibleDocument | null>(null);
     const [deleteTarget, setDeleteTarget] = useState<BibleDocument | null>(
@@ -132,6 +139,7 @@ export function AdminPage() {
                 limit: 20,
                 lesson: lessonFilter || undefined,
                 section_type: sectionFilter || undefined,
+                search: search || undefined,
             });
             setDocuments(res.documents);
             setPagination(res.pagination);
@@ -154,7 +162,7 @@ export function AdminPage() {
         } finally {
             setLoading(false);
         }
-    }, [page, lessonFilter, sectionFilter]);
+    }, [page, lessonFilter, sectionFilter, search]);
 
     const loadStatus = useCallback(async () => {
         try {
@@ -165,6 +173,16 @@ export function AdminPage() {
         }
     }, []);
 
+    // Debounce the search input (300ms) before it triggers a fetch, and reset
+    // to page 1 whenever the query changes.
+    useEffect(() => {
+        const t = setTimeout(() => {
+            setSearch(searchInput.trim());
+            setPage(1);
+        }, 300);
+        return () => clearTimeout(t);
+    }, [searchInput]);
+
     useEffect(() => {
         // Skip the documents probe when the user isn't logged in yet — it would
         // just 401. After a successful login, AdminLogin.onSuccess triggers the
@@ -173,7 +191,7 @@ export function AdminPage() {
         if (hasAdminCredentials()) void loadDocuments();
         void loadStatus();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [page, lessonFilter, sectionFilter]);
+    }, [page, lessonFilter, sectionFilter, search]);
 
     async function handleSubmit(doc: DocumentInput) {
         try {
@@ -323,8 +341,8 @@ export function AdminPage() {
                     </div>
                 )}
 
-                {/* Filters */}
-                <div className="mb-4 flex flex-wrap gap-2">
+                {/* Filters + Search (one row; search fills the remaining space) */}
+                <div className="mb-4 flex items-center gap-2">
                     <DropdownMenu>
                         <DropdownMenuTrigger className="inline-flex h-8 items-center gap-1.5 rounded-md border border-input bg-background px-3 text-xs outline-none transition-colors hover:bg-accent">
                             {
@@ -387,6 +405,27 @@ export function AdminPage() {
                             </DropdownMenuRadioGroup>
                         </DropdownMenuContent>
                     </DropdownMenu>
+
+                    {/* Search — fills the remaining space on the right */}
+                    <div className="relative ml-auto min-w-0 flex-1">
+                        <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                        <Input
+                            value={searchInput}
+                            onChange={(e) => setSearchInput(e.target.value)}
+                            placeholder="Cari teks konten, judul, atau tag..."
+                            className="h-8 pl-9 pr-9 text-sm"
+                        />
+                        {searchInput && (
+                            <button
+                                type="button"
+                                onClick={() => setSearchInput("")}
+                                aria-label="Bersihkan pencarian"
+                                className="absolute right-2 top-1/2 flex size-6 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                            >
+                                <X className="size-3.5" />
+                            </button>
+                        )}
+                    </div>
                 </div>
 
                 {/* List */}
@@ -401,7 +440,9 @@ export function AdminPage() {
                     </div>
                 ) : documents.length === 0 ? (
                     <div className="rounded-lg border border-dashed border-border py-16 text-center text-sm text-muted-foreground">
-                        Belum ada dokumen. Klik "Tambah" untuk mulai.
+                        {search || lessonFilter || sectionFilter
+                            ? "Tidak ada dokumen yang cocok dengan filter/pencarian."
+                            : 'Belum ada dokumen. Klik "Tambah" untuk mulai.'}
                     </div>
                 ) : (
                     <div className="space-y-2">
@@ -431,6 +472,16 @@ export function AdminPage() {
                                                 {doc.lesson_title}
                                             </span>
                                         )}
+                                        {doc.images &&
+                                            doc.images.length > 0 && (
+                                                <Badge
+                                                    variant="outline"
+                                                    className="gap-1 text-[10px]"
+                                                >
+                                                    <ImageIcon className="size-3" />
+                                                    {doc.images.length}
+                                                </Badge>
+                                            )}
                                         {!doc.indexed && (
                                             <Badge className="bg-amber-500/15 text-[10px] text-amber-600">
                                                 belum terindeks

@@ -165,8 +165,8 @@ export function DocumentForm({
                             value={content}
                             onChange={(e) => setContent(e.target.value)}
                             placeholder="Isi materi..."
-                            rows={6}
-                            className="text-sm"
+                            rows={12}
+                            className="min-h-56 text-sm"
                         />
                     </div>
 

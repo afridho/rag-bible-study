@@ -78,12 +78,14 @@ export const SECTION_TYPES = [
 export async function listDocuments(params: {
     lesson?: string;
     section_type?: string;
+    search?: string;
     page?: number;
     limit?: number;
 }): Promise<{ documents: BibleDocument[]; pagination: Pagination }> {
     const q = new URLSearchParams();
     if (params.lesson) q.set("lesson", params.lesson);
     if (params.section_type) q.set("section_type", params.section_type);
+    if (params.search) q.set("search", params.search);
     if (params.page) q.set("page", String(params.page));
     if (params.limit) q.set("limit", String(params.limit));
 
