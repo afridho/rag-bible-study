@@ -19,7 +19,11 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { SidebarInset, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
-import { VerseLink, splitVerseReferences } from "@/components/verse-link";
+import {
+    VerseLink,
+    splitVerseReferences,
+    loadBibleBooks,
+} from "@/components/verse-link";
 import { SettingsDialog } from "@/components/settings-dialog";
 import {
     type ChatSession,
@@ -31,7 +35,7 @@ import {
     setNickname,
 } from "@/lib/storage";
 
-const API_BASE = import.meta.env.VITE_API_URL || "/api";
+const API_BASE = "/api";
 
 const LESSON_LABELS: [string, string][] = [
     ["", "Semua Pelajaran"],
@@ -93,6 +97,9 @@ export function ChatLayout() {
 
     // Sync activeId from URL hash on mount
     useEffect(() => {
+        // Load Bible books (for verse-link detection) from the backend
+        void loadBibleBooks();
+
         // Show settings/onboarding if no nickname set
         if (!getNickname()) {
             setShowSettings(true);
@@ -501,21 +508,14 @@ export function ChatLayout() {
                                                     : "flex-row",
                                             )}
                                         >
-                                            <div className="flex-shrink-0 pt-1">
-                                                <div
-                                                    className={cn(
-                                                        "flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold",
-                                                        isUser
-                                                            ? "bg-primary text-primary-foreground"
-                                                            : "bg-muted text-muted-foreground",
-                                                    )}
-                                                >
-                                                    {isUser
-                                                        ? nickname?.[0]?.toUpperCase() ||
-                                                          "U"
-                                                        : "📖"}
+                                            {isUser && (
+                                                <div className="flex-shrink-0 pt-1">
+                                                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs font-bold">
+                                                        {nickname?.[0]?.toUpperCase() ||
+                                                            "U"}
+                                                    </div>
                                                 </div>
-                                            </div>
+                                            )}
                                             <div
                                                 className={cn(
                                                     "min-w-0 flex-1",
@@ -523,60 +523,126 @@ export function ChatLayout() {
                                                         "flex justify-end",
                                                 )}
                                             >
-                                                <Bubble
-                                                    variant={
-                                                        isUser
-                                                            ? "default"
-                                                            : "secondary"
-                                                    }
-                                                    align={
-                                                        isUser ? "end" : "start"
-                                                    }
-                                                >
-                                                    <BubbleContent>
-                                                        {isUser ? (
+                                                {isUser ? (
+                                                    <Bubble
+                                                        variant="default"
+                                                        align="end"
+                                                    >
+                                                        <BubbleContent>
                                                             <div className="whitespace-pre-wrap">
                                                                 {msg.content}
                                                             </div>
-                                                        ) : (
-                                                            <div className="prose prose-sm dark:prose-invert max-w-none prose-p:my-1 prose-ul:my-1 prose-ol:my-1 prose-li:my-0.5 prose-headings:my-2 text-left">
-                                                                <ReactMarkdown
-                                                                    remarkPlugins={[
-                                                                        remarkGfm,
-                                                                    ]}
-                                                                    components={{
-                                                                        p: ({
-                                                                            children,
-                                                                            ...props
-                                                                        }) => (
-                                                                            <p
-                                                                                {...props}
-                                                                            >
-                                                                                {renderWithVerses(
-                                                                                    children,
-                                                                                )}
-                                                                            </p>
-                                                                        ),
-                                                                        li: ({
-                                                                            children,
-                                                                            ...props
-                                                                        }) => (
-                                                                            <li
-                                                                                {...props}
-                                                                            >
-                                                                                {renderWithVerses(
-                                                                                    children,
-                                                                                )}
-                                                                            </li>
-                                                                        ),
-                                                                    }}
-                                                                >
-                                                                    {
-                                                                        msg.content
-                                                                    }
-                                                                </ReactMarkdown>
-                                                            </div>
-                                                        )}
+                                                        </BubbleContent>
+                                                    </Bubble>
+                                                ) : (
+                                                    <div>
+                                                        <div className="prose prose-sm dark:prose-invert max-w-none prose-p:my-1 prose-ul:my-1 prose-ol:my-1 prose-li:my-0.5 prose-headings:my-2 text-left">
+                                                            <ReactMarkdown
+                                                                remarkPlugins={[
+                                                                    remarkGfm,
+                                                                ]}
+                                                                components={{
+                                                                    p: ({
+                                                                        children,
+                                                                        ...props
+                                                                    }) => (
+                                                                        <p
+                                                                            {...props}
+                                                                        >
+                                                                            {renderWithVerses(
+                                                                                children,
+                                                                            )}
+                                                                        </p>
+                                                                    ),
+                                                                    li: ({
+                                                                        children,
+                                                                        ...props
+                                                                    }) => (
+                                                                        <li
+                                                                            {...props}
+                                                                        >
+                                                                            {renderWithVerses(
+                                                                                children,
+                                                                            )}
+                                                                        </li>
+                                                                    ),
+                                                                    strong: ({
+                                                                        children,
+                                                                        ...props
+                                                                    }) => (
+                                                                        <strong
+                                                                            {...props}
+                                                                        >
+                                                                            {renderWithVerses(
+                                                                                children,
+                                                                            )}
+                                                                        </strong>
+                                                                    ),
+                                                                    em: ({
+                                                                        children,
+                                                                        ...props
+                                                                    }) => (
+                                                                        <em
+                                                                            {...props}
+                                                                        >
+                                                                            {renderWithVerses(
+                                                                                children,
+                                                                            )}
+                                                                        </em>
+                                                                    ),
+                                                                    h1: ({
+                                                                        children,
+                                                                        ...props
+                                                                    }) => (
+                                                                        <h1
+                                                                            {...props}
+                                                                        >
+                                                                            {renderWithVerses(
+                                                                                children,
+                                                                            )}
+                                                                        </h1>
+                                                                    ),
+                                                                    h2: ({
+                                                                        children,
+                                                                        ...props
+                                                                    }) => (
+                                                                        <h2
+                                                                            {...props}
+                                                                        >
+                                                                            {renderWithVerses(
+                                                                                children,
+                                                                            )}
+                                                                        </h2>
+                                                                    ),
+                                                                    h3: ({
+                                                                        children,
+                                                                        ...props
+                                                                    }) => (
+                                                                        <h3
+                                                                            {...props}
+                                                                        >
+                                                                            {renderWithVerses(
+                                                                                children,
+                                                                            )}
+                                                                        </h3>
+                                                                    ),
+                                                                    h4: ({
+                                                                        children,
+                                                                        ...props
+                                                                    }) => (
+                                                                        <h4
+                                                                            {...props}
+                                                                        >
+                                                                            {renderWithVerses(
+                                                                                children,
+                                                                            )}
+                                                                        </h4>
+                                                                    ),
+                                                                }}
+                                                            >
+                                                                {msg.content}
+                                                            </ReactMarkdown>
+                                                        </div>
                                                         {msg.sources &&
                                                             msg.sources.length >
                                                                 0 &&
@@ -692,8 +758,8 @@ export function ChatLayout() {
                                                                     )}
                                                                 </div>
                                                             )}
-                                                    </BubbleContent>
-                                                </Bubble>
+                                                    </div>
+                                                )}
                                             </div>
                                         </div>
                                     );

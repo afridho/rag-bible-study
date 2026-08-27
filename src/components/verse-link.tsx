@@ -2,6 +2,21 @@ import { useState } from "react";
 import { BookOpen, X, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+// Selected Bible version (module-level so both fetch helpers share it).
+let currentVersion = "tb_id";
+
+export function setBibleVersion(version: string) {
+    if (version && version !== currentVersion) {
+        currentVersion = version;
+        verseRegex = null; // rebuild book regex for the new version
+        void loadBibleBooks();
+    }
+}
+
+export function getBibleVersion() {
+    return currentVersion;
+}
+
 interface VerseData {
     verse: number;
     text: string;
@@ -58,7 +73,7 @@ export function VerseLink({ reference }: VerseLinkProps) {
         setError(null);
 
         try {
-            const url = `/api/verses/${encodeURIComponent(parsed.book)}/${parsed.chapter}/${parsed.verse}`;
+            const url = `/api/verses/${encodeURIComponent(parsed.book)}/${parsed.chapter}/${parsed.verse}?version=${currentVersion}`;
             const res = await fetch(url);
             const data = await res.json();
 
@@ -139,74 +154,42 @@ export function VerseLink({ reference }: VerseLinkProps) {
     );
 }
 
-// Indonesian Bible book names for verse reference detection in rendered text
-const BOOK_NAMES = [
-    "Kejadian",
-    "Keluaran",
-    "Imamat",
-    "Bilangan",
-    "Ulangan",
-    "Yosua",
-    "Hakim-hakim",
-    "Rut",
-    "Samuel",
-    "Raja-raja",
-    "Tawarikh",
-    "Ezra",
-    "Nehemia",
-    "Ester",
-    "Ayub",
-    "Mazmur",
-    "Amsal",
-    "Pengkhotbah",
-    "Kidung Agung",
-    "Yesaya",
-    "Yeremia",
-    "Ratapan",
-    "Yehezkiel",
-    "Daniel",
-    "Hosea",
-    "Yoel",
-    "Amos",
-    "Obaja",
-    "Yunus",
-    "Mikha",
-    "Nahum",
-    "Habakuk",
-    "Zefanya",
-    "Hagai",
-    "Zakharia",
-    "Maleakhi",
-    "Matius",
-    "Markus",
-    "Lukas",
-    "Yohanes",
-    "Kisah Para Rasul",
-    "Roma",
-    "Korintus",
-    "Galatia",
-    "Efesus",
-    "Filipi",
-    "Kolose",
-    "Tesalonika",
-    "Timotius",
-    "Titus",
-    "Filemon",
-    "Ibrani",
-    "Yakobus",
-    "Petrus",
-    "Yudas",
-    "Wahyu",
-];
+// The verse-reference regex is built dynamically from the Bible books returned
+// by the backend (`/verses/books`), so book names & abbreviations stay in sync
+// with the database — no hardcoded list to maintain here.
+let verseRegex: RegExp | null = null;
 
-const BOOK_PATTERN = BOOK_NAMES.sort((a, b) => b.length - a.length)
-    .map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
-    .join("|");
+function buildVerseRegex(books: string[]) {
+    const sorted = [...books]
+        .filter(Boolean)
+        .sort((a, b) => b.length - a.length)
+        .map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+    if (sorted.length === 0) return;
+    verseRegex = new RegExp(
+        `(\\d\\s+)?(?:${sorted.join("|")})\\s+\\d{1,3}:\\d{1,3}(?:\\s*-\\s*\\d{1,3})?`,
+        "g",
+    );
+}
 
-const VERSE_REGEX = new RegExp(
-    `(\\d\\s+)?(?:${BOOK_PATTERN})\\s+\\d{1,3}:\\d{1,3}(?:\\s*-\\s*\\d{1,3})?`,
-    "g",
-);
+/** Fetch book names + abbreviations from the backend and build the regex. */
+export async function loadBibleBooks() {
+    if (verseRegex) return; // already loaded
+    try {
+        const res = await fetch(`/api/verses/books?version=${currentVersion}`);
+        const data = await res.json();
+        if (data.success && Array.isArray(data.data)) {
+            const names: string[] = [];
+            for (const b of data.data) {
+                if (b.name_id) names.push(b.name_id);
+                if (b.name_en) names.push(b.name_en);
+                if (b.abbr) names.push(b.abbr);
+            }
+            buildVerseRegex(names);
+        }
+    } catch {
+        /* silently ignore — verse links just won't render until loaded */
+    }
+}
 
 /**
  * Split text into parts: plain text and verse references.
@@ -215,10 +198,13 @@ const VERSE_REGEX = new RegExp(
 export function splitVerseReferences(
     text: string,
 ): { type: "text" | "verse"; value: string }[] {
+    // Regex not ready yet (books still loading) — return text as-is.
+    if (!verseRegex) return [{ type: "text", value: text }];
+
     const parts: { type: "text" | "verse"; value: string }[] = [];
     let lastIndex = 0;
 
-    const regex = new RegExp(VERSE_REGEX.source, "g");
+    const regex = new RegExp(verseRegex.source, "g");
     let match: RegExpExecArray | null;
 
     while ((match = regex.exec(text)) !== null) {

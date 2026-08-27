@@ -1,4 +1,4 @@
-const API_BASE = `${import.meta.env.VITE_API_URL || "http://localhost:3300"}/api/bible/bible-study`;
+const API_BASE = "/api";
 
 const AUTH_KEY = "bible-admin-auth";
 
