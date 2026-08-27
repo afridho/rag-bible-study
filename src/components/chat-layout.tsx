@@ -19,6 +19,14 @@ import { Bubble, BubbleContent } from "@/components/ui/bubble";
 import { Marker, MarkerContent, MarkerIcon } from "@/components/ui/marker";
 import { Spinner } from "@/components/ui/spinner";
 import {
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
+} from "@/components/ui/table";
+import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuRadioGroup,
@@ -565,6 +573,62 @@ export function ChatLayout() {
                                                                     remarkGfm,
                                                                 ]}
                                                                 components={{
+                                                                    table: ({
+                                                                        children,
+                                                                    }) => (
+                                                                        <div className="my-2">
+                                                                            <Table>
+                                                                                {
+                                                                                    children
+                                                                                }
+                                                                            </Table>
+                                                                        </div>
+                                                                    ),
+                                                                    thead: ({
+                                                                        children,
+                                                                    }) => (
+                                                                        <TableHeader>
+                                                                            {
+                                                                                children
+                                                                            }
+                                                                        </TableHeader>
+                                                                    ),
+                                                                    tbody: ({
+                                                                        children,
+                                                                    }) => (
+                                                                        <TableBody>
+                                                                            {
+                                                                                children
+                                                                            }
+                                                                        </TableBody>
+                                                                    ),
+                                                                    tr: ({
+                                                                        children,
+                                                                    }) => (
+                                                                        <TableRow>
+                                                                            {
+                                                                                children
+                                                                            }
+                                                                        </TableRow>
+                                                                    ),
+                                                                    th: ({
+                                                                        children,
+                                                                    }) => (
+                                                                        <TableHead className="whitespace-normal align-top font-semibold">
+                                                                            {renderWithVerses(
+                                                                                children,
+                                                                            )}
+                                                                        </TableHead>
+                                                                    ),
+                                                                    td: ({
+                                                                        children,
+                                                                    }) => (
+                                                                        <TableCell className="whitespace-normal align-top">
+                                                                            {renderWithVerses(
+                                                                                children,
+                                                                            )}
+                                                                        </TableCell>
+                                                                    ),
                                                                     p: ({
                                                                         children,
                                                                         ...props
