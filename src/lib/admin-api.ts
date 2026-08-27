@@ -148,6 +148,32 @@ export async function deleteDocument(id: string): Promise<void> {
     }
 }
 
+export interface ChunkPreview {
+    index: number;
+    text: string;
+    verse_refs: string[];
+    chars: number;
+}
+
+/** Preview how content will be chunked + which verse refs are detected (no save). */
+export async function previewChunks(content: string): Promise<ChunkPreview[]> {
+    const res = await fetch(`${API_BASE}/documents/preview-chunks`, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            ...getAdminAuthHeader(),
+        },
+        body: JSON.stringify({ content }),
+    });
+    if (res.status === 401) throw new UnauthorizedError();
+    if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Failed to preview chunks");
+    }
+    const data = await res.json();
+    return data.chunks;
+}
+
 export async function getStatus(): Promise<{
     indexed: boolean;
     lastIndexedAt: string | null;

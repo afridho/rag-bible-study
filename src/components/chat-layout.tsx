@@ -6,6 +6,7 @@ import {
     Copy,
     Check,
     Download,
+    RotateCcw,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -41,6 +42,7 @@ import {
     loadBibleBooks,
 } from "@/components/verse-link";
 import { SettingsDialog } from "@/components/settings-dialog";
+import { BookmarksDialog } from "@/components/bookmarks-dialog";
 import {
     type ChatSession,
     getSessions,
@@ -89,6 +91,7 @@ interface Source {
 }
 
 interface Message {
+    id?: string;
     role: "user" | "assistant";
     content: string;
     sources?: Source[];
@@ -109,6 +112,7 @@ export function ChatLayout() {
     const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
     const [nickname, setNicknameState] = useState<string | null>(getNickname);
     const [showSettings, setShowSettings] = useState(false);
+    const [showBookmarks, setShowBookmarks] = useState(false);
     const scrollRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
     const abortRef = useRef<AbortController | null>(null);
@@ -263,12 +267,26 @@ export function ChatLayout() {
         }
 
         const userMsg: Message = { role: "user", content: query };
-        setMessages((prev) => [...prev, userMsg]);
+        const baseMessages = [...messages, userMsg];
+        setMessages(baseMessages);
         setInput("");
+        await streamAnswer(query, baseMessages);
+    }
+
+    /**
+     * Stream an assistant answer for `query`, building conversation history from
+     * `baseMessages` (the message list that should already be rendered, ending
+     * with the user turn being answered). Shared by first-send and regenerate.
+     */
+    async function streamAnswer(query: string, baseMessages: Message[]) {
         setIsLoading(true);
 
+        // Stable id for this request's assistant placeholder — declared here so
+        // the catch/finally can target it precisely (not by content equality).
+        const placeholderId = generateId();
+
         try {
-            const history = [...messages, userMsg]
+            const history = baseMessages
                 .filter((m) => m.role === "user" || m.role === "assistant")
                 .slice(-20)
                 .map((m) => ({ role: m.role, content: m.content }));
@@ -300,9 +318,24 @@ export function ChatLayout() {
             let sources: Source[] = [];
             let eventType = "";
 
+            // Track the assistant placeholder by its stable id so concurrent
+            // submit/stop cycles never update or remove the wrong bubble.
+            const updatePlaceholder = () =>
+                setMessages((prev) =>
+                    prev.map((m) =>
+                        m.id === placeholderId
+                            ? {
+                                  ...m,
+                                  content: fullAnswer,
+                                  sources,
+                              }
+                            : m,
+                    ),
+                );
+
             setMessages((prev) => [
                 ...prev,
-                { role: "assistant", content: "" },
+                { id: placeholderId, role: "assistant", content: "" },
             ]);
 
             while (true) {
@@ -322,26 +355,10 @@ export function ChatLayout() {
                                 sources = data.sources || [];
                             else if (eventType === "token") {
                                 fullAnswer += data.delta;
-                                setMessages((prev) => {
-                                    const u = [...prev];
-                                    u[u.length - 1] = {
-                                        role: "assistant",
-                                        content: fullAnswer,
-                                        sources,
-                                    };
-                                    return u;
-                                });
+                                updatePlaceholder();
                             } else if (eventType === "done") {
                                 fullAnswer = data.answer || fullAnswer;
-                                setMessages((prev) => {
-                                    const u = [...prev];
-                                    u[u.length - 1] = {
-                                        role: "assistant",
-                                        content: fullAnswer,
-                                        sources,
-                                    };
-                                    return u;
-                                });
+                                updatePlaceholder();
                             } else if (eventType === "error")
                                 throw new Error(data.message);
                         } catch {
@@ -351,14 +368,22 @@ export function ChatLayout() {
                     }
                 }
             }
+
+            // If the stream ended without any content, drop the empty placeholder.
+            if (!fullAnswer) {
+                setMessages((prev) =>
+                    prev.filter((m) => m.id !== placeholderId),
+                );
+            }
         } catch (err) {
-            // Don't show error message for user-initiated abort
-            if ((err as Error).name === "AbortError") {
-                setMessages((prev) => prev.filter((m) => m.content !== ""));
-            } else {
+            // Remove this request's placeholder (by id — never touches other bubbles).
+            setMessages((prev) => prev.filter((m) => m.id !== placeholderId));
+            // Don't show an error bubble for a user-initiated abort.
+            if ((err as Error).name !== "AbortError") {
                 setMessages((prev) => [
-                    ...prev.filter((m) => m.content !== ""),
+                    ...prev,
                     {
+                        id: generateId(),
                         role: "assistant",
                         content: `❌ Error: ${(err as Error).message}`,
                     },
@@ -369,6 +394,28 @@ export function ChatLayout() {
             abortRef.current = null;
             inputRef.current?.focus();
         }
+    }
+
+    /**
+     * Re-run the last user question, replacing the latest assistant answer.
+     * Drops the trailing assistant message and re-streams from the prior history.
+     */
+    async function handleRegenerate() {
+        if (isLoading) return;
+        // Find the last user message and everything up to (and including) it.
+        let lastUserIdx = -1;
+        for (let i = messages.length - 1; i >= 0; i--) {
+            if (messages[i].role === "user") {
+                lastUserIdx = i;
+                break;
+            }
+        }
+        if (lastUserIdx === -1) return;
+
+        const query = messages[lastUserIdx].content;
+        const baseMessages = messages.slice(0, lastUserIdx + 1);
+        setMessages(baseMessages);
+        await streamAnswer(query, baseMessages);
     }
 
     function handleStop() {
@@ -442,6 +489,11 @@ export function ChatLayout() {
                 }}
             />
 
+            <BookmarksDialog
+                open={showBookmarks}
+                onOpenChange={setShowBookmarks}
+            />
+
             <AppSidebar
                 sessions={sessions}
                 activeId={activeId}
@@ -449,6 +501,7 @@ export function ChatLayout() {
                 onNew={startNewChat}
                 onDelete={handleDeleteSession}
                 onOpenSettings={() => setShowSettings(true)}
+                onOpenBookmarks={() => setShowBookmarks(true)}
             />
             <SidebarInset>
                 <div className="relative flex h-svh flex-col">
@@ -460,6 +513,7 @@ export function ChatLayout() {
                             size="icon-sm"
                             onClick={startNewChat}
                             title="New chat"
+                            aria-label="New chat"
                         >
                             <SquarePen className="size-4" />
                         </Button>
@@ -825,6 +879,7 @@ export function ChatLayout() {
                                                                         )
                                                                     }
                                                                     title="Copy response"
+                                                                    aria-label="Copy response"
                                                                     className="inline-flex size-7 items-center justify-center rounded-md transition-colors hover:bg-accent hover:text-foreground"
                                                                 >
                                                                     {copiedIndex ===
@@ -840,10 +895,27 @@ export function ChatLayout() {
                                                                         handlePrint
                                                                     }
                                                                     title="Export PDF"
+                                                                    aria-label="Export PDF"
                                                                     className="inline-flex size-7 items-center justify-center rounded-md transition-colors hover:bg-accent hover:text-foreground"
                                                                 >
                                                                     <Download className="size-4" />
                                                                 </button>
+                                                                {isLastMessage && (
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={
+                                                                            handleRegenerate
+                                                                        }
+                                                                        disabled={
+                                                                            isLoading
+                                                                        }
+                                                                        title="Buat ulang jawaban"
+                                                                        aria-label="Buat ulang jawaban"
+                                                                        className="inline-flex size-7 items-center justify-center rounded-md transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50"
+                                                                    >
+                                                                        <RotateCcw className="size-4" />
+                                                                    </button>
+                                                                )}
                                                             </div>
                                                         )}
                                                     </div>

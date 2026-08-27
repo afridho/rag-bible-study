@@ -17,15 +17,17 @@ import {
     DropdownMenuRadioItem,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { ChevronDown, ImagePlus, X, Loader2 } from "lucide-react";
+import { ChevronDown, ImagePlus, X, Loader2, Eye } from "lucide-react";
 import { toast } from "@/components/ui/toast";
 import {
     type BibleDocument,
     type DocumentImage,
     type DocumentInput,
+    type ChunkPreview,
     SECTION_TYPES,
     uploadImages,
     deleteImage,
+    previewChunks,
 } from "@/lib/admin-api";
 
 const LESSON_OPTIONS = [
@@ -63,6 +65,8 @@ export function DocumentForm({
     const [saving, setSaving] = useState(false);
     const [images, setImages] = useState<DocumentImage[]>([]);
     const [uploading, setUploading] = useState(false);
+    const [preview, setPreview] = useState<ChunkPreview[] | null>(null);
+    const [previewing, setPreviewing] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     /* eslint-disable react-hooks/set-state-in-effect */
@@ -86,8 +90,21 @@ export function DocumentForm({
             setTags("");
             setImages([]);
         }
+        setPreview(null);
     }, [document, open]);
     /* eslint-enable react-hooks/set-state-in-effect */
+
+    async function handlePreview() {
+        if (!content.trim()) return;
+        setPreviewing(true);
+        try {
+            setPreview(await previewChunks(content));
+        } catch (err) {
+            toast.add({ title: (err as Error).message, type: "error" });
+        } finally {
+            setPreviewing(false);
+        }
+    }
 
     async function handleUpload(files: FileList | null) {
         if (!files || files.length === 0 || !document) return;
@@ -160,7 +177,24 @@ export function DocumentForm({
 
                 <form onSubmit={handleSubmit} className="space-y-4">
                     <div className="space-y-1.5">
-                        <label className="text-sm font-medium">Konten *</label>
+                        <div className="flex items-center justify-between">
+                            <label className="text-sm font-medium">
+                                Konten *
+                            </label>
+                            <button
+                                type="button"
+                                onClick={handlePreview}
+                                disabled={!content.trim() || previewing}
+                                className="inline-flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
+                            >
+                                {previewing ? (
+                                    <Loader2 className="size-3.5 animate-spin" />
+                                ) : (
+                                    <Eye className="size-3.5" />
+                                )}
+                                Preview RAG
+                            </button>
+                        </div>
                         <Textarea
                             value={content}
                             onChange={(e) => setContent(e.target.value)}
@@ -168,6 +202,40 @@ export function DocumentForm({
                             rows={12}
                             className="min-h-56 text-sm"
                         />
+                        {preview && (
+                            <div className="mt-2 rounded-md border border-border bg-muted/30 p-2">
+                                <p className="mb-1.5 text-[11px] font-medium text-muted-foreground">
+                                    {preview.length} chunk yang akan diindeks
+                                    RAG:
+                                </p>
+                                <div className="max-h-48 space-y-2 overflow-y-auto">
+                                    {preview.map((c) => (
+                                        <div
+                                            key={c.index}
+                                            className="rounded border border-border bg-background p-2"
+                                        >
+                                            <div className="mb-1 flex items-center gap-2 text-[10px] text-muted-foreground">
+                                                <span className="font-medium">
+                                                    #{c.index + 1}
+                                                </span>
+                                                <span>{c.chars} char</span>
+                                                {c.verse_refs.length > 0 && (
+                                                    <span className="truncate">
+                                                        📖{" "}
+                                                        {c.verse_refs.join(
+                                                            ", ",
+                                                        )}
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <p className="line-clamp-3 text-xs text-muted-foreground">
+                                                {c.text}
+                                            </p>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
                     </div>
 
                     <div className="grid grid-cols-2 gap-3">

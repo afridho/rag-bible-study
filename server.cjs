@@ -58,9 +58,18 @@ async function proxyRequest(req, res, targetPath) {
     delete headers["x-host-secret"];
     if (API_SECRET) headers["x-host-secret"] = API_SECRET;
 
+    // Abort the upstream request when the client disconnects (Stop button /
+    // closed tab), and after a hard timeout so a hung backend can't tie up the
+    // proxy connection forever. This propagates the cancellation to the backend,
+    // which in turn aborts the LLM stream.
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 120_000); // 2 min
+    req.on("close", () => controller.abort());
+
     const fetchOptions = {
         method: req.method,
         headers,
+        signal: controller.signal,
     };
 
     if (req.method !== "GET" && req.method !== "HEAD" && req.body) {
@@ -87,19 +96,21 @@ async function proxyRequest(req, res, targetPath) {
             const reader = response.body.getReader();
             const push = async () => {
                 while (true) {
+                    if (controller.signal.aborted) break;
                     const { done, value } = await reader.read();
-                    if (done) {
-                        res.end();
-                        break;
-                    }
+                    if (done) break;
                     res.write(value);
                 }
             };
             await push();
-        } else {
-            res.end();
         }
+        if (!res.writableEnded) res.end();
     } catch (err) {
+        // Client disconnect / timeout — expected, nothing to report.
+        if (controller.signal.aborted || err.name === "AbortError") {
+            if (!res.writableEnded) res.end();
+            return;
+        }
         console.error("[Proxy Error]", err.message);
         if (!res.headersSent) {
             res.status(502).json({
@@ -107,6 +118,8 @@ async function proxyRequest(req, res, targetPath) {
                 message: err.message,
             });
         }
+    } finally {
+        clearTimeout(timeout);
     }
 }
 

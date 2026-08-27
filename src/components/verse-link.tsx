@@ -1,6 +1,7 @@
 import { useState } from "react";
-import { BookOpen, X, Loader2 } from "lucide-react";
+import { BookOpen, X, Loader2, Bookmark, BookmarkCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { isBookmarked, toggleBookmark } from "@/lib/storage";
 
 // Selected Bible version (module-level so both fetch helpers share it).
 let currentVersion = "id_tb";
@@ -49,14 +50,33 @@ function parseReference(ref: string): {
     return { book: bookName, chapter, verse };
 }
 
+/** Which verse numbers a reference points at (for highlighting in chapter view). */
+function referencedVerseSet(ref: string): Set<number> {
+    const parsed = parseReference(ref);
+    const set = new Set<number>();
+    if (!parsed) return set;
+    // parsed.verse is like "16" or "19-20"; expand ranges.
+    for (const part of parsed.verse.split(",")) {
+        const m = part.match(/^(\d+)(?:-(\d+))?$/);
+        if (!m) continue;
+        const s = parseInt(m[1], 10);
+        const e = m[2] != null ? parseInt(m[2], 10) : s;
+        for (let v = Math.min(s, e); v <= Math.max(s, e); v++) set.add(v);
+    }
+    return set;
+}
+
 export function VerseLink({ reference }: VerseLinkProps) {
     const [open, setOpen] = useState(false);
     const [loading, setLoading] = useState(false);
     const [verses, setVerses] = useState<VerseData[] | null>(null);
     const [error, setError] = useState<string | null>(null);
+    // Whether the popover currently shows the full chapter vs just the reference.
+    const [chapterMode, setChapterMode] = useState(false);
+    const [saved, setSaved] = useState(() => isBookmarked(reference));
 
     async function fetchVerse() {
-        if (verses) {
+        if (verses && !chapterMode) {
             setOpen(!open);
             return;
         }
@@ -71,6 +91,7 @@ export function VerseLink({ reference }: VerseLinkProps) {
         setLoading(true);
         setOpen(true);
         setError(null);
+        setChapterMode(false);
 
         try {
             const url = `/api/verses/${encodeURIComponent(parsed.book)}/${parsed.chapter}/${parsed.verse}?version=${currentVersion}`;
@@ -100,6 +121,50 @@ export function VerseLink({ reference }: VerseLinkProps) {
         } finally {
             setLoading(false);
         }
+    }
+
+    async function fetchChapter() {
+        const parsed = parseReference(reference);
+        if (!parsed) return;
+
+        setLoading(true);
+        setError(null);
+
+        try {
+            const url = `/api/verses/${encodeURIComponent(parsed.book)}/${parsed.chapter}?version=${currentVersion}`;
+            const res = await fetch(url);
+            const data = await res.json();
+
+            if (!res.ok) {
+                setError(data.error || "Gagal mengambil pasal");
+                return;
+            }
+            if (data.data) {
+                setVerses(
+                    data.data.map((v: { verse: number; text: string }) => ({
+                        verse: v.verse,
+                        text: v.text,
+                    })),
+                );
+                setChapterMode(true);
+            }
+        } catch {
+            setError("Gagal terhubung ke server");
+        } finally {
+            setLoading(false);
+        }
+    }
+
+    const referenced = referencedVerseSet(reference);
+
+    function handleToggleBookmark() {
+        // Save only the referenced verses' text (not the whole chapter).
+        const refText = (verses || [])
+            .filter((v) => referenced.size === 0 || referenced.has(v.verse))
+            .map((v) => `(${v.verse}) ${v.text}`)
+            .join(" ");
+        const nowSaved = toggleBookmark({ reference, text: refText });
+        setSaved(nowSaved);
     }
 
     return (
@@ -145,15 +210,69 @@ export function VerseLink({ reference }: VerseLinkProps) {
                     )}
                     {error && <span className="text-destructive">{error}</span>}
                     {verses && (
-                        <span className="block space-y-0.5 text-foreground/90">
-                            {verses.map((v) => (
-                                <span key={v.verse} className="block">
-                                    <span className="font-medium text-muted-foreground">
-                                        {v.verse}.
-                                    </span>{" "}
-                                    {v.text}
-                                </span>
-                            ))}
+                        <span
+                            className={cn(
+                                "block space-y-0.5 text-foreground/90",
+                                chapterMode && "max-h-64 overflow-y-auto pr-1",
+                            )}
+                        >
+                            {verses.map((v) => {
+                                // In chapter view, dim verses that weren't the
+                                // referenced ones so the cited verse stands out.
+                                const isRef =
+                                    !chapterMode || referenced.has(v.verse);
+                                return (
+                                    <span
+                                        key={v.verse}
+                                        className={cn(
+                                            "block",
+                                            !isRef && "opacity-50",
+                                        )}
+                                    >
+                                        <span className="font-medium text-muted-foreground">
+                                            {v.verse}.
+                                        </span>{" "}
+                                        {v.text}
+                                    </span>
+                                );
+                            })}
+                        </span>
+                    )}
+                    {verses && !loading && !error && (
+                        <span className="mt-2 flex items-center justify-end gap-3">
+                            <button
+                                type="button"
+                                onClick={
+                                    chapterMode ? fetchVerse : fetchChapter
+                                }
+                                className="text-[11px] font-medium text-primary hover:underline"
+                            >
+                                {chapterMode
+                                    ? "← Kembali ke ayat"
+                                    : "Baca 1 pasal penuh"}
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleToggleBookmark}
+                                title={
+                                    saved
+                                        ? "Hapus dari tersimpan"
+                                        : "Simpan ayat"
+                                }
+                                aria-label={
+                                    saved
+                                        ? "Hapus dari tersimpan"
+                                        : "Simpan ayat"
+                                }
+                                className="inline-flex items-center gap-1 text-[11px] font-medium text-muted-foreground hover:text-foreground"
+                            >
+                                {saved ? (
+                                    <BookmarkCheck className="size-3.5 text-primary" />
+                                ) : (
+                                    <Bookmark className="size-3.5" />
+                                )}
+                                {saved ? "Tersimpan" : "Simpan"}
+                            </button>
                         </span>
                     )}
                 </span>

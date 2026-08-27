@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
     Plus,
     Pencil,
@@ -131,7 +131,12 @@ export function AdminPage() {
         totalChunks: number;
     } | null>(null);
 
+    // Monotonic request id so out-of-order responses (fast filter/search/page
+    // changes) are ignored — only the latest request updates the list.
+    const reqSeq = useRef(0);
+
     const loadDocuments = useCallback(async () => {
+        const seq = ++reqSeq.current;
         setLoading(true);
         try {
             const res = await listDocuments({
@@ -141,10 +146,12 @@ export function AdminPage() {
                 section_type: sectionFilter || undefined,
                 search: search || undefined,
             });
+            if (seq !== reqSeq.current) return; // a newer request superseded this one
             setDocuments(res.documents);
             setPagination(res.pagination);
             setAuthed(true);
         } catch (err) {
+            if (seq !== reqSeq.current) return; // stale error from a superseded request
             if (err instanceof UnauthorizedError) {
                 // Only show "wrong credentials" error if user actually had
                 // stored credentials (i.e. they submitted the form at least
@@ -160,7 +167,8 @@ export function AdminPage() {
                 toast.add({ title: "Gagal memuat dokumen", type: "error" });
             }
         } finally {
-            setLoading(false);
+            // Only the latest request controls the loading flag.
+            if (seq === reqSeq.current) setLoading(false);
         }
     }, [page, lessonFilter, sectionFilter, search]);
 
@@ -501,6 +509,8 @@ export function AdminPage() {
                                     <Button
                                         variant="ghost"
                                         size="icon-sm"
+                                        aria-label="Edit dokumen"
+                                        title="Edit"
                                         onClick={() => {
                                             setEditing(doc);
                                             setFormOpen(true);
@@ -511,6 +521,8 @@ export function AdminPage() {
                                     <Button
                                         variant="ghost"
                                         size="icon-sm"
+                                        aria-label="Hapus dokumen"
+                                        title="Hapus"
                                         onClick={() => setDeleteTarget(doc)}
                                     >
                                         <Trash2 className="size-4 text-destructive" />

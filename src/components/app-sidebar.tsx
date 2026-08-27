@@ -1,5 +1,12 @@
 import { useState } from "react";
-import { Plus, Trash2, MoreHorizontal, User, ShieldCheck } from "lucide-react";
+import {
+    Plus,
+    Trash2,
+    MoreHorizontal,
+    User,
+    ShieldCheck,
+    Bookmark,
+} from "lucide-react";
 import { toast } from "@/components/ui/toast";
 import {
     AlertDialog,
@@ -41,6 +48,7 @@ interface AppSidebarProps {
     onNew: () => void;
     onDelete: (id: string) => void;
     onOpenSettings: () => void;
+    onOpenBookmarks: () => void;
 }
 
 export function AppSidebar({
@@ -50,6 +58,7 @@ export function AppSidebar({
     onNew,
     onDelete,
     onOpenSettings,
+    onOpenBookmarks,
 }: AppSidebarProps) {
     const [search, setSearch] = useState("");
     const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
@@ -177,6 +186,10 @@ export function AppSidebar({
                                 <DropdownMenuItem onClick={onOpenSettings}>
                                     <User className="size-4" />
                                     Nickname
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={onOpenBookmarks}>
+                                    <Bookmark className="size-4" />
+                                    Ayat Tersimpan
                                 </DropdownMenuItem>
                                 <DropdownMenuItem
                                     onClick={() => {
