@@ -50,6 +50,7 @@ import {
     getNickname,
     setNickname,
 } from "@/lib/storage";
+import { avatarUrl } from "@/lib/avatar";
 
 const API_BASE = "/api";
 
@@ -541,10 +542,13 @@ export function ChatLayout() {
                                         >
                                             {isUser && (
                                                 <div className="flex-shrink-0 pt-1">
-                                                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs font-bold">
-                                                        {nickname?.[0]?.toUpperCase() ||
-                                                            "U"}
-                                                    </div>
+                                                    <img
+                                                        src={avatarUrl(
+                                                            nickname,
+                                                        )}
+                                                        alt="Avatar"
+                                                        className="h-8 w-8 rounded-full border border-border bg-muted"
+                                                    />
                                                 </div>
                                             )}
                                             <div

@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { avatarUrl } from "@/lib/avatar";
 
 interface SettingsDialogProps {
     open: boolean;
@@ -61,6 +62,15 @@ export function SettingsDialog({
                 </DialogHeader>
 
                 <form onSubmit={handleSubmit} className="space-y-4">
+                    {/* Live avatar preview — generated from the typed nickname */}
+                    <div className="flex justify-center">
+                        <img
+                            src={avatarUrl(value)}
+                            alt="Preview avatar"
+                            className="size-20 rounded-full border border-border bg-muted"
+                        />
+                    </div>
+
                     <div className="space-y-1.5">
                         <label
                             htmlFor="nickname"
