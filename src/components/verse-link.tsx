@@ -3,7 +3,7 @@ import { BookOpen, X, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // Selected Bible version (module-level so both fetch helpers share it).
-let currentVersion = "tb_id";
+let currentVersion = "id_tb";
 
 export function setBibleVersion(version: string) {
     if (version && version !== currentVersion) {
@@ -107,28 +107,36 @@ export function VerseLink({ reference }: VerseLinkProps) {
             <button
                 onClick={fetchVerse}
                 className={cn(
-                    "ml-0.5 inline-flex cursor-pointer items-center align-middle text-primary/70 transition-colors hover:text-primary",
-                    open && "text-primary",
+                    "inline-flex cursor-pointer items-center gap-0.5 rounded px-1 align-middle transition-colors",
+                    // Highlight the reference label itself while the popover is
+                    // open, so it's clear which verse is currently shown.
+                    open
+                        ? "bg-lime-300 text-black"
+                        : "text-inherit hover:bg-accent",
                 )}
                 title={`Lihat ${reference}`}
                 type="button"
             >
-                <BookOpen className="size-3.5" />
+                {reference}
+                <BookOpen
+                    className={cn(
+                        "size-3.5",
+                        // When highlighted, inherit the dark label color so the
+                        // icon stays visible on the lime background (esp. dark mode).
+                        open ? "text-current" : "text-primary/70",
+                    )}
+                />
             </button>
             {open && (
-                <span className="mt-1 block rounded-lg border border-border bg-muted/50 px-3 py-2 text-xs">
-                    <span className="mb-1 flex items-center justify-between">
-                        <span className="font-semibold text-foreground">
-                            {reference}
-                        </span>
-                        <button
-                            onClick={() => setOpen(false)}
-                            className="text-muted-foreground hover:text-foreground"
-                            type="button"
-                        >
-                            <X className="size-3" />
-                        </button>
-                    </span>
+                <span className="relative mt-1 block rounded-lg border border-border bg-muted/50 py-2 pl-3 pr-8 text-xs font-normal">
+                    <button
+                        onClick={() => setOpen(false)}
+                        className="absolute right-2 top-2 text-muted-foreground hover:text-foreground"
+                        type="button"
+                        aria-label="Tutup"
+                    >
+                        <X className="size-3" />
+                    </button>
                     {loading && (
                         <span className="flex items-center gap-1.5 text-muted-foreground">
                             <Loader2 className="size-3 animate-spin" />
@@ -137,7 +145,7 @@ export function VerseLink({ reference }: VerseLinkProps) {
                     )}
                     {error && <span className="text-destructive">{error}</span>}
                     {verses && (
-                        <span className="mt-1 block space-y-0.5 text-foreground/90">
+                        <span className="block space-y-0.5 text-foreground/90">
                             {verses.map((v) => (
                                 <span key={v.verse} className="block">
                                     <span className="font-medium text-muted-foreground">

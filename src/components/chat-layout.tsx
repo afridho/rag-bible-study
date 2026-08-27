@@ -7,7 +7,6 @@ import Lightbox from "yet-another-react-lightbox";
 import "yet-another-react-lightbox/styles.css";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Bubble, BubbleContent } from "@/components/ui/bubble";
 import { Marker, MarkerContent, MarkerIcon } from "@/components/ui/marker";
@@ -389,10 +388,7 @@ export function ChatLayout() {
             <span key={key}>
                 {parts.map((part, j) =>
                     part.type === "verse" ? (
-                        <span key={j}>
-                            {part.value}
-                            <VerseLink reference={part.value} />
-                        </span>
+                        <VerseLink key={j} reference={part.value} />
                     ) : (
                         <span key={j}>{part.value}</span>
                     ),
@@ -646,118 +642,71 @@ export function ChatLayout() {
                                                             </ReactMarkdown>
                                                         </div>
                                                         {msg.sources &&
-                                                            msg.sources.length >
-                                                                0 &&
+                                                            msg.sources.some(
+                                                                (s) =>
+                                                                    s.images
+                                                                        ?.length >
+                                                                    0,
+                                                            ) &&
                                                             !(
                                                                 isLoading &&
                                                                 i ===
                                                                     messages.length -
                                                                         1
                                                             ) && (
-                                                                <div className="mt-3 border-t border-border/30 pt-2 text-left">
-                                                                    <p className="mb-1 text-[11px] font-medium text-muted-foreground">
-                                                                        📚
-                                                                        Sumber:
-                                                                    </p>
-                                                                    <div className="flex flex-wrap gap-1">
-                                                                        {msg.sources.map(
+                                                                <div className="mt-3 flex flex-wrap gap-2 text-left">
+                                                                    {msg.sources
+                                                                        .flatMap(
                                                                             (
                                                                                 s,
-                                                                                j,
+                                                                            ) =>
+                                                                                s.images ||
+                                                                                [],
+                                                                        )
+                                                                        .map(
+                                                                            (
+                                                                                url,
+                                                                                k,
                                                                             ) => (
-                                                                                <Badge
+                                                                                <img
                                                                                     key={
-                                                                                        j
+                                                                                        k
                                                                                     }
-                                                                                    variant="secondary"
-                                                                                    className="text-[10px]"
-                                                                                >
-                                                                                    L
-                                                                                    {
-                                                                                        s.lesson_number
+                                                                                    src={
+                                                                                        url
                                                                                     }
-
-                                                                                    :{" "}
-                                                                                    {
-                                                                                        s.lesson_title
-                                                                                    }{" "}
-                                                                                    (
-                                                                                    {
-                                                                                        s.section_type
-                                                                                    }
-
-                                                                                    )
-                                                                                    {s
-                                                                                        .bible_verses
-                                                                                        ?.length >
-                                                                                        0 &&
-                                                                                        ` — ${s.bible_verses.join(", ")}`}
-                                                                                </Badge>
+                                                                                    alt="Ilustrasi"
+                                                                                    className="h-24 w-auto cursor-zoom-in rounded-md border border-border object-contain hover:opacity-80 transition-opacity"
+                                                                                    onClick={() => {
+                                                                                        const allImages =
+                                                                                            msg
+                                                                                                .sources!.flatMap(
+                                                                                                    (
+                                                                                                        s,
+                                                                                                    ) =>
+                                                                                                        s.images ||
+                                                                                                        [],
+                                                                                                )
+                                                                                                .map(
+                                                                                                    (
+                                                                                                        src,
+                                                                                                    ) => ({
+                                                                                                        src,
+                                                                                                    }),
+                                                                                                );
+                                                                                        setLightboxSlides(
+                                                                                            allImages,
+                                                                                        );
+                                                                                        setLightboxIndex(
+                                                                                            k,
+                                                                                        );
+                                                                                        setLightboxOpen(
+                                                                                            true,
+                                                                                        );
+                                                                                    }}
+                                                                                />
                                                                             ),
                                                                         )}
-                                                                    </div>
-                                                                    {msg.sources.some(
-                                                                        (s) =>
-                                                                            s
-                                                                                .images
-                                                                                ?.length >
-                                                                            0,
-                                                                    ) && (
-                                                                        <div className="mt-2 flex flex-wrap gap-2">
-                                                                            {msg.sources
-                                                                                .flatMap(
-                                                                                    (
-                                                                                        s,
-                                                                                    ) =>
-                                                                                        s.images ||
-                                                                                        [],
-                                                                                )
-                                                                                .map(
-                                                                                    (
-                                                                                        url,
-                                                                                        k,
-                                                                                    ) => (
-                                                                                        <img
-                                                                                            key={
-                                                                                                k
-                                                                                            }
-                                                                                            src={
-                                                                                                url
-                                                                                            }
-                                                                                            alt="Ilustrasi"
-                                                                                            className="h-24 w-auto cursor-zoom-in rounded-md border border-border object-contain hover:opacity-80 transition-opacity"
-                                                                                            onClick={() => {
-                                                                                                const allImages =
-                                                                                                    msg
-                                                                                                        .sources!.flatMap(
-                                                                                                            (
-                                                                                                                s,
-                                                                                                            ) =>
-                                                                                                                s.images ||
-                                                                                                                [],
-                                                                                                        )
-                                                                                                        .map(
-                                                                                                            (
-                                                                                                                src,
-                                                                                                            ) => ({
-                                                                                                                src,
-                                                                                                            }),
-                                                                                                        );
-                                                                                                setLightboxSlides(
-                                                                                                    allImages,
-                                                                                                );
-                                                                                                setLightboxIndex(
-                                                                                                    k,
-                                                                                                );
-                                                                                                setLightboxOpen(
-                                                                                                    true,
-                                                                                                );
-                                                                                            }}
-                                                                                        />
-                                                                                    ),
-                                                                                )}
-                                                                        </div>
-                                                                    )}
                                                                 </div>
                                                             )}
                                                     </div>

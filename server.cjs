@@ -4,6 +4,13 @@ const path = require("path");
 const app = express();
 const PORT = process.env.PORT || 3000;
 const API_URL = process.env.API_URL || "http://localhost:3300";
+// Shared secret sent to the backend so it accepts only proxied requests.
+// Must match HOST_SECRET on the afridho-api side.
+const API_SECRET = process.env.API_SECRET || "";
+
+// Trust the platform edge (Railway) so req.ip resolves to the real client IP
+// from the inbound X-Forwarded-For, rather than the edge's own address.
+app.set("trust proxy", true);
 
 // Parse JSON bodies for proxy forwarding
 app.use("/api", express.json());
@@ -38,6 +45,18 @@ async function proxyRequest(req, res, targetPath) {
     // Remove hop-by-hop headers
     delete headers.host;
     delete headers.connection;
+
+    // Anti-spoof client IP: the backend rate-limiter keys on X-Real-Client-IP.
+    // A malicious user could send this header themselves to dodge the limit by
+    // rotating fake IPs, so we ALWAYS strip any inbound copy and set it from
+    // req.ip (trusted, derived from the platform edge's X-Forwarded-For).
+    delete headers["x-real-client-ip"];
+    headers["x-real-client-ip"] = req.ip;
+
+    // Shared secret so the backend accepts only proxied traffic. Always strip
+    // any inbound copy first so a client can't forge it, then set our own.
+    delete headers["x-host-secret"];
+    if (API_SECRET) headers["x-host-secret"] = API_SECRET;
 
     const fetchOptions = {
         method: req.method,
