@@ -27,7 +27,12 @@ app.all("/api/{*splat}", async (req, res) => {
 });
 
 async function proxyRequest(req, res, targetPath) {
-    const url = `${API_URL}${targetPath}`;
+    // Preserve the original query string (?lesson=3&page=1...). The route splat
+    // only captures the path, so without this every query param would be dropped
+    // and backend filters (lesson/section/version/search) would silently no-op.
+    const qsIndex = req.originalUrl.indexOf("?");
+    const queryString = qsIndex >= 0 ? req.originalUrl.slice(qsIndex) : "";
+    const url = `${API_URL}${targetPath}${queryString}`;
     const headers = { ...req.headers };
 
     // Remove hop-by-hop headers
