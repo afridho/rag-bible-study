@@ -12,6 +12,11 @@ export function getAdminAuthHeader(): Record<string, string> {
     return token ? { Authorization: `Basic ${token}` } : {};
 }
 
+/** Whether admin credentials are currently stored (i.e. the user has logged in). */
+export function hasAdminCredentials(): boolean {
+    return !!sessionStorage.getItem(AUTH_KEY);
+}
+
 export function clearAdminCredentials() {
     sessionStorage.removeItem(AUTH_KEY);
 }

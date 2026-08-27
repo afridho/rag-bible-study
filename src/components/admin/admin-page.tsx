@@ -29,13 +29,22 @@ import {
     DropdownMenuRadioItem,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+    Pagination,
+    PaginationContent,
+    PaginationEllipsis,
+    PaginationItem,
+    PaginationLink,
+    PaginationNext,
+    PaginationPrevious,
+} from "@/components/ui/pagination";
 import { ChevronDown } from "lucide-react";
 import { DocumentForm } from "@/components/admin/document-form";
 import { AdminLogin } from "@/components/admin/admin-login";
 import {
     type BibleDocument,
     type DocumentInput,
-    type Pagination,
+    type Pagination as PaginationMeta,
     listDocuments,
     createDocument,
     updateDocument,
@@ -43,6 +52,7 @@ import {
     getStatus,
     triggerIngest,
     clearAdminCredentials,
+    hasAdminCredentials,
     UnauthorizedError,
 } from "@/lib/admin-api";
 
@@ -71,9 +81,31 @@ const SECTION_LABELS: [string, string][] = [
     ["general", "General"],
 ];
 
+/**
+ * Build the list of page tokens to render: page numbers and "ellipsis" markers.
+ * Always shows first + last page, and a window around the current page.
+ * e.g. current=5, total=10 → [1, "ellipsis", 4, 5, 6, "ellipsis", 10]
+ */
+function getPageRange(current: number, total: number): (number | "ellipsis")[] {
+    if (total <= 7) {
+        return Array.from({ length: total }, (_, i) => i + 1);
+    }
+
+    const pages: (number | "ellipsis")[] = [1];
+    const start = Math.max(2, current - 1);
+    const end = Math.min(total - 1, current + 1);
+
+    if (start > 2) pages.push("ellipsis");
+    for (let p = start; p <= end; p++) pages.push(p);
+    if (end < total - 1) pages.push("ellipsis");
+
+    pages.push(total);
+    return pages;
+}
+
 export function AdminPage() {
     const [documents, setDocuments] = useState<BibleDocument[]>([]);
-    const [pagination, setPagination] = useState<Pagination | null>(null);
+    const [pagination, setPagination] = useState<PaginationMeta | null>(null);
     const [loading, setLoading] = useState(true);
     const [page, setPage] = useState(1);
     const [lessonFilter, setLessonFilter] = useState("");
@@ -106,9 +138,16 @@ export function AdminPage() {
             setAuthed(true);
         } catch (err) {
             if (err instanceof UnauthorizedError) {
+                // Only show "wrong credentials" error if user actually had
+                // stored credentials (i.e. they submitted the form at least
+                // once). On first visit sessionStorage is empty — the 401 is
+                // just the expected probe, so we show the login form cleanly.
+                const hadCredentials = hasAdminCredentials();
                 clearAdminCredentials();
                 setAuthed(false);
-                setAuthError("Kredensial salah. Coba lagi.");
+                if (hadCredentials) {
+                    setAuthError("Kredensial salah. Coba lagi.");
+                }
             } else {
                 toast.add({ title: "Gagal memuat dokumen", type: "error" });
             }
@@ -127,8 +166,11 @@ export function AdminPage() {
     }, []);
 
     useEffect(() => {
+        // Skip the documents probe when the user isn't logged in yet — it would
+        // just 401. After a successful login, AdminLogin.onSuccess triggers the
+        // load explicitly. loadStatus is public (no auth) so it always runs.
         // eslint-disable-next-line react-hooks/set-state-in-effect
-        void loadDocuments();
+        if (hasAdminCredentials()) void loadDocuments();
         void loadStatus();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [page, lessonFilter, sectionFilter]);
@@ -430,27 +472,68 @@ export function AdminPage() {
 
                 {/* Pagination */}
                 {pagination && pagination.totalPages > 1 && (
-                    <div className="mt-6 flex items-center justify-center gap-2">
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            disabled={page <= 1}
-                            onClick={() => setPage((p) => p - 1)}
-                        >
-                            Sebelumnya
-                        </Button>
-                        <span className="text-sm text-muted-foreground">
-                            {page} / {pagination.totalPages}
-                        </span>
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            disabled={page >= pagination.totalPages}
-                            onClick={() => setPage((p) => p + 1)}
-                        >
-                            Berikutnya
-                        </Button>
-                    </div>
+                    <Pagination className="mt-6">
+                        <PaginationContent>
+                            <PaginationItem>
+                                <PaginationPrevious
+                                    href="#"
+                                    text="Sebelumnya"
+                                    aria-disabled={page <= 1}
+                                    className={
+                                        page <= 1
+                                            ? "pointer-events-none opacity-50"
+                                            : undefined
+                                    }
+                                    onClick={(e) => {
+                                        e.preventDefault();
+                                        if (page > 1) setPage((p) => p - 1);
+                                    }}
+                                />
+                            </PaginationItem>
+
+                            {getPageRange(page, pagination.totalPages).map(
+                                (token, i) =>
+                                    token === "ellipsis" ? (
+                                        <PaginationItem key={`ellipsis-${i}`}>
+                                            <PaginationEllipsis />
+                                        </PaginationItem>
+                                    ) : (
+                                        <PaginationItem key={token}>
+                                            <PaginationLink
+                                                href="#"
+                                                isActive={token === page}
+                                                onClick={(e) => {
+                                                    e.preventDefault();
+                                                    setPage(token);
+                                                }}
+                                            >
+                                                {token}
+                                            </PaginationLink>
+                                        </PaginationItem>
+                                    ),
+                            )}
+
+                            <PaginationItem>
+                                <PaginationNext
+                                    href="#"
+                                    text="Berikutnya"
+                                    aria-disabled={
+                                        page >= pagination.totalPages
+                                    }
+                                    className={
+                                        page >= pagination.totalPages
+                                            ? "pointer-events-none opacity-50"
+                                            : undefined
+                                    }
+                                    onClick={(e) => {
+                                        e.preventDefault();
+                                        if (page < pagination.totalPages)
+                                            setPage((p) => p + 1);
+                                    }}
+                                />
+                            </PaginationItem>
+                        </PaginationContent>
+                    </Pagination>
                 )}
             </div>
 
