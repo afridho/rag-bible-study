@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, type FormEvent } from "react";
-import { Send, Loader2, SquarePen, ChevronDown } from "lucide-react";
+import { Send, SquarePen, ChevronDown } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { DotLottieReact } from "@lottiefiles/dotlottie-react";
@@ -10,6 +10,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Bubble, BubbleContent } from "@/components/ui/bubble";
+import { Marker, MarkerContent, MarkerIcon } from "@/components/ui/marker";
+import { Spinner } from "@/components/ui/spinner";
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -768,15 +770,14 @@ export function ChatLayout() {
                                 {isLoading &&
                                     messages[messages.length - 1]?.content ===
                                         "" && (
-                                        <div className="flex items-center gap-3">
-                                            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-muted text-xs">
-                                                📖
-                                            </div>
-                                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                                <Loader2 className="h-4 w-4 animate-spin" />
-                                                <span>Sedang berpikir...</span>
-                                            </div>
-                                        </div>
+                                        <Marker role="status">
+                                            <MarkerIcon>
+                                                <Spinner />
+                                            </MarkerIcon>
+                                            <MarkerContent className="shimmer">
+                                                Sedang berpikir...
+                                            </MarkerContent>
+                                        </Marker>
                                     )}
                             </div>
                         </ScrollArea>
