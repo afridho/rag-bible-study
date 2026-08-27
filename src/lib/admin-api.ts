@@ -1,0 +1,157 @@
+const API_BASE = `${import.meta.env.VITE_API_URL || "http://localhost:3300"}/api/bible/bible-study`;
+
+export interface DocumentImage {
+    url: string;
+    public_id: string;
+}
+
+export interface BibleDocument {
+    _id: string;
+    content: string;
+    section_type: string;
+    lesson_number: number | null;
+    lesson_title: string;
+    bible_verses: string[];
+    tags: string[];
+    images?: DocumentImage[];
+    indexed: boolean;
+    createdAt: string;
+    updatedAt: string;
+}
+
+export interface DocumentInput {
+    content: string;
+    section_type: string;
+    lesson_number: number | null;
+    lesson_title: string;
+    bible_verses: string[];
+    tags: string[];
+}
+
+export interface Pagination {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+}
+
+export const SECTION_TYPES = [
+    "objectives",
+    "tips",
+    "verses",
+    "keywords",
+    "questions",
+    "application",
+    "illustrations",
+    "general",
+] as const;
+
+export async function listDocuments(params: {
+    lesson?: string;
+    section_type?: string;
+    page?: number;
+    limit?: number;
+}): Promise<{ documents: BibleDocument[]; pagination: Pagination }> {
+    const q = new URLSearchParams();
+    if (params.lesson) q.set("lesson", params.lesson);
+    if (params.section_type) q.set("section_type", params.section_type);
+    if (params.page) q.set("page", String(params.page));
+    if (params.limit) q.set("limit", String(params.limit));
+
+    const res = await fetch(`${API_BASE}/documents?${q.toString()}`);
+    if (!res.ok) throw new Error("Failed to fetch documents");
+    return res.json();
+}
+
+export async function createDocument(
+    doc: DocumentInput,
+): Promise<BibleDocument> {
+    const res = await fetch(`${API_BASE}/documents`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(doc),
+    });
+    if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Failed to create document");
+    }
+    const data = await res.json();
+    return data.document;
+}
+
+export async function updateDocument(
+    id: string,
+    doc: Partial<DocumentInput>,
+): Promise<void> {
+    const res = await fetch(`${API_BASE}/documents/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(doc),
+    });
+    if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Failed to update document");
+    }
+}
+
+export async function deleteDocument(id: string): Promise<void> {
+    const res = await fetch(`${API_BASE}/documents/${id}`, {
+        method: "DELETE",
+    });
+    if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Failed to delete document");
+    }
+}
+
+export async function getStatus(): Promise<{
+    indexed: boolean;
+    lastIndexedAt: string | null;
+    totalDocuments: number;
+    indexedDocuments: number;
+    totalChunks: number;
+}> {
+    const res = await fetch(`${API_BASE}/status`);
+    if (!res.ok) throw new Error("Failed to fetch status");
+    const data = await res.json();
+    return data.status;
+}
+
+export async function triggerIngest(): Promise<void> {
+    const res = await fetch(`${API_BASE}/ingest`, { method: "POST" });
+    if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Failed to ingest");
+    }
+}
+
+export async function uploadImages(
+    id: string,
+    files: File[],
+): Promise<DocumentImage[]> {
+    const form = new FormData();
+    files.forEach((f) => form.append("images", f));
+
+    const res = await fetch(`${API_BASE}/documents/${id}/images`, {
+        method: "POST",
+        body: form,
+    });
+    if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Failed to upload images");
+    }
+    const data = await res.json();
+    return data.images;
+}
+
+export async function deleteImage(id: string, publicId: string): Promise<void> {
+    const res = await fetch(`${API_BASE}/documents/${id}/images`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ public_id: publicId }),
+    });
+    if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Failed to delete image");
+    }
+}
