@@ -751,13 +751,13 @@ export function ChatLayout() {
                                     autoFocus
                                 />
                                 <DropdownMenu>
-                                    <DropdownMenuTrigger className="inline-flex h-7 shrink-0 items-center gap-1 rounded-full border border-border bg-transparent px-2.5 text-[10px] text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-accent-foreground">
+                                    <DropdownMenuTrigger className="inline-flex h-7 shrink-0 items-center gap-1 rounded-full bg-transparent px-2.5 text-xs text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-accent-foreground">
                                         {
                                             LESSON_LABELS.find(
                                                 ([v]) => v === lessonFilter,
                                             )?.[1]
                                         }
-                                        <ChevronDown className="size-3" />
+                                        <ChevronDown className="size-3.5" />
                                     </DropdownMenuTrigger>
                                     <DropdownMenuContent
                                         align="end"
