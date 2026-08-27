@@ -1,5 +1,12 @@
 import React, { useState, useRef, useEffect, type FormEvent } from "react";
-import { Send, SquarePen, ChevronDown } from "lucide-react";
+import {
+    Send,
+    SquarePen,
+    ChevronDown,
+    Copy,
+    Check,
+    Download,
+} from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { DotLottieReact } from "@lottiefiles/dotlottie-react";
@@ -90,6 +97,7 @@ export function ChatLayout() {
     const [lightboxIndex, setLightboxIndex] = useState(0);
     const [lightboxSlides, setLightboxSlides] = useState<{ src: string }[]>([]);
     const [suggestions, setSuggestions] = useState<string[]>([]);
+    const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
     const [nickname, setNicknameState] = useState<string | null>(getNickname);
     const [showSettings, setShowSettings] = useState(false);
     const scrollRef = useRef<HTMLDivElement>(null);
@@ -370,6 +378,21 @@ export function ChatLayout() {
         }, 0);
     }
 
+    async function handleCopy(text: string, index: number) {
+        try {
+            await navigator.clipboard.writeText(text);
+            setCopiedIndex(index);
+            setTimeout(() => setCopiedIndex(null), 1500);
+        } catch {
+            /* clipboard unavailable — ignore */
+        }
+    }
+
+    function handlePrint() {
+        // Trigger the browser's print dialog (user can "Save as PDF").
+        window.print();
+    }
+
     /**
      * Recursively process React children to detect Bible verse references
      * in text nodes and inject VerseLink components.
@@ -421,7 +444,7 @@ export function ChatLayout() {
             <SidebarInset>
                 <div className="relative flex h-svh flex-col">
                     {/* Floating toolbar (top-left like Gemini) */}
-                    <div className="absolute left-4 top-4 z-10 flex items-center gap-1">
+                    <div className="absolute left-4 top-4 z-10 flex items-center gap-1 print:hidden">
                         <SidebarTrigger />
                         <Button
                             variant="ghost"
@@ -496,11 +519,13 @@ export function ChatLayout() {
                                 {messages.map((msg, i) => {
                                     const isUser = msg.role === "user";
                                     if (!msg.content && !isUser) return null;
+                                    const isLastMessage =
+                                        i === messages.length - 1;
                                     return (
                                         <div
                                             key={i}
                                             className={cn(
-                                                "flex gap-3",
+                                                "group flex gap-3",
                                                 isUser
                                                     ? "flex-row-reverse"
                                                     : "flex-row",
@@ -709,6 +734,50 @@ export function ChatLayout() {
                                                                         )}
                                                                 </div>
                                                             )}
+                                                        {!(
+                                                            isLoading &&
+                                                            isLastMessage
+                                                        ) && (
+                                                            <div
+                                                                className={cn(
+                                                                    "mt-2 flex items-center gap-1 text-muted-foreground transition-opacity print:hidden",
+                                                                    // Gemini-style: the current (last) response keeps its
+                                                                    // actions visible; older ones reveal on hover.
+                                                                    isLastMessage
+                                                                        ? "opacity-100"
+                                                                        : "opacity-0 focus-within:opacity-100 group-hover:opacity-100",
+                                                                )}
+                                                            >
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() =>
+                                                                        handleCopy(
+                                                                            msg.content,
+                                                                            i,
+                                                                        )
+                                                                    }
+                                                                    title="Copy response"
+                                                                    className="inline-flex size-7 items-center justify-center rounded-md transition-colors hover:bg-accent hover:text-foreground"
+                                                                >
+                                                                    {copiedIndex ===
+                                                                    i ? (
+                                                                        <Check className="size-4 text-lime-500" />
+                                                                    ) : (
+                                                                        <Copy className="size-4" />
+                                                                    )}
+                                                                </button>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={
+                                                                        handlePrint
+                                                                    }
+                                                                    title="Export PDF"
+                                                                    className="inline-flex size-7 items-center justify-center rounded-md transition-colors hover:bg-accent hover:text-foreground"
+                                                                >
+                                                                    <Download className="size-4" />
+                                                                </button>
+                                                            </div>
+                                                        )}
                                                     </div>
                                                 )}
                                             </div>
@@ -733,7 +802,7 @@ export function ChatLayout() {
                     </div>
 
                     {/* Input with Gemini-style fade backdrop */}
-                    <div className="relative bg-background">
+                    <div className="relative bg-background print:hidden">
                         {/* Gradient fade so messages blur out behind the input */}
                         <div className="pointer-events-none absolute -top-16 left-0 right-0 h-16 bg-gradient-to-t from-background to-transparent" />
                         <div className="mx-auto w-full max-w-3xl px-6 py-3">
