@@ -20,6 +20,7 @@ import {
 import { SidebarInset, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
 import { VerseLink, splitVerseReferences } from "@/components/verse-link";
+import { SettingsDialog } from "@/components/settings-dialog";
 import {
     type ChatSession,
     getSessions,
@@ -85,16 +86,16 @@ export function ChatLayout() {
     const [lightboxSlides, setLightboxSlides] = useState<{ src: string }[]>([]);
     const [suggestions, setSuggestions] = useState<string[]>([]);
     const [nickname, setNicknameState] = useState<string | null>(getNickname);
-    const [showNamePrompt, setShowNamePrompt] = useState(false);
+    const [showSettings, setShowSettings] = useState(false);
     const scrollRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
     const abortRef = useRef<AbortController | null>(null);
 
     // Sync activeId from URL hash on mount
     useEffect(() => {
-        // Show name prompt if no nickname set
+        // Show settings/onboarding if no nickname set
         if (!getNickname()) {
-            setShowNamePrompt(true);
+            setShowSettings(true);
         }
 
         // Fetch suggestions for empty state
@@ -393,47 +394,16 @@ export function ChatLayout() {
 
     return (
         <>
-            {/* Name prompt overlay */}
-            {showNamePrompt && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-                    <div className="w-full max-w-sm rounded-xl bg-popover p-6 shadow-lg">
-                        <h3 className="mb-2 text-lg font-medium">
-                            Siapa nama kamu?
-                        </h3>
-                        <p className="mb-4 text-sm text-muted-foreground">
-                            Supaya asisten bisa memanggil kamu dengan nama.
-                        </p>
-                        <form
-                            onSubmit={(e) => {
-                                e.preventDefault();
-                                const form = e.target as HTMLFormElement;
-                                const input = form.elements.namedItem(
-                                    "nickname",
-                                ) as HTMLInputElement;
-                                const value = input.value.trim();
-                                if (value) {
-                                    setNickname(value);
-                                    setNicknameState(value);
-                                    setShowNamePrompt(false);
-                                }
-                            }}
-                        >
-                            <input
-                                name="nickname"
-                                autoFocus
-                                placeholder="Nama panggilan..."
-                                className="mb-4 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
-                            />
-                            <button
-                                type="submit"
-                                className="w-full rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
-                            >
-                                Lanjutkan
-                            </button>
-                        </form>
-                    </div>
-                </div>
-            )}
+            <SettingsDialog
+                open={showSettings}
+                onOpenChange={setShowSettings}
+                nickname={nickname}
+                forceComplete={!nickname}
+                onSaveNickname={(name) => {
+                    setNickname(name);
+                    setNicknameState(name);
+                }}
+            />
 
             <AppSidebar
                 sessions={sessions}
@@ -441,8 +411,7 @@ export function ChatLayout() {
                 onSelect={selectSession}
                 onNew={startNewChat}
                 onDelete={handleDeleteSession}
-                nickname={nickname}
-                onChangeNickname={() => setShowNamePrompt(true)}
+                onOpenSettings={() => setShowSettings(true)}
             />
             <SidebarInset>
                 <div className="relative flex h-svh flex-col">
@@ -492,7 +461,8 @@ export function ChatLayout() {
                                             className="mb-4 h-48 w-48"
                                         />
                                         <h2 className="mb-2 text-lg font-medium">
-                                            RAG
+                                            {/* RAG */}
+                                            Bible Study
                                         </h2>
                                         <p className="max-w-md text-sm text-muted-foreground">
                                             Tanyakan apa saja tentang kurikulum
@@ -746,50 +716,55 @@ export function ChatLayout() {
                         </ScrollArea>
                     </div>
 
-                    {/* Input */}
-                    <div className="mx-auto w-full max-w-3xl px-6 py-3">
-                        <form
-                            onSubmit={handleSubmit}
-                            className="flex items-center gap-2 rounded-2xl border bg-muted/50 px-4 py-2"
-                        >
-                            <input
-                                ref={inputRef}
-                                value={input}
-                                onChange={(e) => setInput(e.target.value)}
-                                placeholder="Ketik pertanyaan..."
-                                disabled={isLoading}
-                                className="min-w-0 flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none disabled:opacity-50"
-                                autoFocus
-                            />
-                            <DropdownMenu>
-                                <DropdownMenuTrigger className="inline-flex h-7 shrink-0 items-center gap-1 rounded-full border border-border bg-transparent px-2.5 text-[10px] text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-accent-foreground">
-                                    {
-                                        LESSON_LABELS.find(
-                                            ([v]) => v === lessonFilter,
-                                        )?.[1]
-                                    }
-                                    <ChevronDown className="size-3" />
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent
-                                    align="end"
-                                    className="min-w-[180px]"
-                                >
-                                    <DropdownMenuRadioGroup
-                                        value={lessonFilter}
-                                        onValueChange={setLessonFilter}
+                    {/* Input with Gemini-style fade backdrop */}
+                    <div className="relative bg-background">
+                        {/* Gradient fade so messages blur out behind the input */}
+                        <div className="pointer-events-none absolute -top-16 left-0 right-0 h-16 bg-gradient-to-t from-background to-transparent" />
+                        <div className="mx-auto w-full max-w-3xl px-6 py-3">
+                            <form
+                                onSubmit={handleSubmit}
+                                className="flex items-center gap-2 rounded-2xl border bg-muted/50 px-4 py-2 shadow-lg shadow-black/5 backdrop-blur-sm"
+                            >
+                                <input
+                                    ref={inputRef}
+                                    value={input}
+                                    onChange={(e) => setInput(e.target.value)}
+                                    placeholder="Ketik pertanyaan..."
+                                    disabled={isLoading}
+                                    className="min-w-0 flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none disabled:opacity-50"
+                                    autoFocus
+                                />
+                                <DropdownMenu>
+                                    <DropdownMenuTrigger className="inline-flex h-7 shrink-0 items-center gap-1 rounded-full border border-border bg-transparent px-2.5 text-[10px] text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-accent-foreground">
+                                        {
+                                            LESSON_LABELS.find(
+                                                ([v]) => v === lessonFilter,
+                                            )?.[1]
+                                        }
+                                        <ChevronDown className="size-3" />
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent
+                                        align="end"
+                                        className="min-w-[180px]"
                                     >
-                                        {LESSON_LABELS.map(([value, label]) => (
-                                            <DropdownMenuRadioItem
-                                                key={value}
-                                                value={value}
-                                            >
-                                                {label}
-                                            </DropdownMenuRadioItem>
-                                        ))}
-                                    </DropdownMenuRadioGroup>
-                                </DropdownMenuContent>
-                            </DropdownMenu>
-                            {/* Section filter - disabled for now
+                                        <DropdownMenuRadioGroup
+                                            value={lessonFilter}
+                                            onValueChange={setLessonFilter}
+                                        >
+                                            {LESSON_LABELS.map(
+                                                ([value, label]) => (
+                                                    <DropdownMenuRadioItem
+                                                        key={value}
+                                                        value={value}
+                                                    >
+                                                        {label}
+                                                    </DropdownMenuRadioItem>
+                                                ),
+                                            )}
+                                        </DropdownMenuRadioGroup>
+                                    </DropdownMenuContent>
+                                </DropdownMenu>
+                                {/* Section filter - disabled for now
                             <DropdownMenu>
                                 <DropdownMenuTrigger className="inline-flex h-7 shrink-0 items-center gap-1 rounded-full border border-border bg-transparent px-2.5 text-[10px] text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-accent-foreground">
                                     {
@@ -821,39 +796,40 @@ export function ChatLayout() {
                                 </DropdownMenuContent>
                             </DropdownMenu>
                             */}
-                            {isLoading ? (
-                                <Button
-                                    type="button"
-                                    size="icon-sm"
-                                    variant="destructive"
-                                    className="shrink-0 rounded-full"
-                                    onClick={handleStop}
-                                >
-                                    <svg
-                                        className="size-4"
-                                        viewBox="0 0 24 24"
-                                        fill="currentColor"
+                                {isLoading ? (
+                                    <Button
+                                        type="button"
+                                        size="icon-sm"
+                                        variant="destructive"
+                                        className="shrink-0 rounded-full"
+                                        onClick={handleStop}
                                     >
-                                        <rect
-                                            x="6"
-                                            y="6"
-                                            width="12"
-                                            height="12"
-                                            rx="2"
-                                        />
-                                    </svg>
-                                </Button>
-                            ) : (
-                                <Button
-                                    type="submit"
-                                    size="icon-sm"
-                                    className="shrink-0 rounded-full"
-                                    disabled={!input.trim()}
-                                >
-                                    <Send className="size-4" />
-                                </Button>
-                            )}
-                        </form>
+                                        <svg
+                                            className="size-4"
+                                            viewBox="0 0 24 24"
+                                            fill="currentColor"
+                                        >
+                                            <rect
+                                                x="6"
+                                                y="6"
+                                                width="12"
+                                                height="12"
+                                                rx="2"
+                                            />
+                                        </svg>
+                                    </Button>
+                                ) : (
+                                    <Button
+                                        type="submit"
+                                        size="icon-sm"
+                                        className="shrink-0 rounded-full"
+                                        disabled={!input.trim()}
+                                    >
+                                        <Send className="size-4" />
+                                    </Button>
+                                )}
+                            </form>
+                        </div>
                     </div>
                 </div>
             </SidebarInset>
