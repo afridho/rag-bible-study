@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { BookOpen, X, Loader2 } from "lucide-react";
+import { BookOpen, BookOpenText, ArrowLeft, X, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // Selected Bible version (module-level so both fetch helpers share it).
@@ -181,15 +181,42 @@ export function VerseLink({ reference }: VerseLinkProps) {
                 />
             </button>
             {open && (
-                <span className="relative mt-1 block rounded-lg border border-border bg-muted/50 py-2 pl-3 pr-8 text-xs font-normal">
-                    <button
-                        onClick={() => setOpen(false)}
-                        className="absolute right-2 top-2 text-muted-foreground hover:text-foreground"
-                        type="button"
-                        aria-label="Tutup"
-                    >
-                        <X className="size-3" />
-                    </button>
+                <span className="mt-1 block rounded-lg border border-border bg-muted/50 px-3 py-2 text-xs font-normal">
+                    <span className="float-right ml-2 flex items-center gap-1.5">
+                        {verses && !loading && !error && (
+                            <button
+                                type="button"
+                                onClick={
+                                    chapterMode ? fetchVerse : fetchChapter
+                                }
+                                className="text-primary hover:text-primary/70"
+                                title={
+                                    chapterMode
+                                        ? "Kembali ke ayat"
+                                        : "Baca 1 pasal penuh"
+                                }
+                                aria-label={
+                                    chapterMode
+                                        ? "Kembali ke ayat"
+                                        : "Baca 1 pasal penuh"
+                                }
+                            >
+                                {chapterMode ? (
+                                    <ArrowLeft className="size-3.5" />
+                                ) : (
+                                    <BookOpenText className="size-3.5" />
+                                )}
+                            </button>
+                        )}
+                        <button
+                            onClick={() => setOpen(false)}
+                            className="text-muted-foreground hover:text-foreground"
+                            type="button"
+                            aria-label="Tutup"
+                        >
+                            <X className="size-3.5" />
+                        </button>
+                    </span>
                     {loading && (
                         <span className="flex items-center gap-1.5 text-muted-foreground">
                             <Loader2 className="size-3 animate-spin" />
@@ -224,21 +251,6 @@ export function VerseLink({ reference }: VerseLinkProps) {
                                     </span>
                                 );
                             })}
-                        </span>
-                    )}
-                    {verses && !loading && !error && (
-                        <span className="mt-2 flex items-center justify-end">
-                            <button
-                                type="button"
-                                onClick={
-                                    chapterMode ? fetchVerse : fetchChapter
-                                }
-                                className="text-[11px] font-medium text-primary hover:underline"
-                            >
-                                {chapterMode
-                                    ? "← Kembali ke ayat"
-                                    : "Baca 1 pasal penuh"}
-                            </button>
                         </span>
                     )}
                 </span>
