@@ -181,7 +181,7 @@ export function VerseLink({ reference }: VerseLinkProps) {
                 />
             </button>
             {open && (
-                <span className="mt-1 block rounded-lg border border-border bg-muted/50 px-3 py-2 text-xs font-normal">
+                <span className="mt-1 block rounded-lg border border-border bg-muted/50 px-3 py-2 text-sm font-normal leading-relaxed">
                     <span className="float-right ml-2 flex items-center gap-1.5">
                         {verses && !loading && !error && (
                             <button
