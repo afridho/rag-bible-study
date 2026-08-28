@@ -45,6 +45,11 @@ async function proxyRequest(req, res, targetPath) {
     // Remove hop-by-hop headers
     delete headers.host;
     delete headers.connection;
+    // We re-serialize req.body below, so the original content-length no longer
+    // matches. Leaving it causes the backend body parser to read a truncated/
+    // empty body (query becomes undefined → "Query is required", empty stream).
+    // Let fetch recompute it from the new body.
+    delete headers["content-length"];
 
     // Anti-spoof client IP: the backend rate-limiter keys on X-Real-Client-IP.
     // A malicious user could send this header themselves to dodge the limit by
@@ -64,7 +69,11 @@ async function proxyRequest(req, res, targetPath) {
     // which in turn aborts the LLM stream.
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 120_000); // 2 min
-    req.on("close", () => controller.abort());
+    // Abort only when the RESPONSE socket closes (client truly went away). Using
+    // req 'close' here is unsafe for streaming: it can fire once the request
+    // body is fully received while the SSE response is still streaming, which
+    // would abort the upstream and produce an empty stream in production.
+    res.on("close", () => controller.abort());
 
     const fetchOptions = {
         method: req.method,
