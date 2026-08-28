@@ -1,7 +1,6 @@
 import { useState } from "react";
-import { BookOpen, X, Loader2, Bookmark, BookmarkCheck } from "lucide-react";
+import { BookOpen, X, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { isBookmarked, toggleBookmark } from "@/lib/storage";
 
 // Selected Bible version (module-level so both fetch helpers share it).
 let currentVersion = "id_tb";
@@ -73,7 +72,6 @@ export function VerseLink({ reference }: VerseLinkProps) {
     const [error, setError] = useState<string | null>(null);
     // Whether the popover currently shows the full chapter vs just the reference.
     const [chapterMode, setChapterMode] = useState(false);
-    const [saved, setSaved] = useState(() => isBookmarked(reference));
 
     async function fetchVerse() {
         if (verses && !chapterMode) {
@@ -157,16 +155,6 @@ export function VerseLink({ reference }: VerseLinkProps) {
 
     const referenced = referencedVerseSet(reference);
 
-    function handleToggleBookmark() {
-        // Save only the referenced verses' text (not the whole chapter).
-        const refText = (verses || [])
-            .filter((v) => referenced.size === 0 || referenced.has(v.verse))
-            .map((v) => `(${v.verse}) ${v.text}`)
-            .join(" ");
-        const nowSaved = toggleBookmark({ reference, text: refText });
-        setSaved(nowSaved);
-    }
-
     return (
         <span className="inline">
             <button
@@ -239,7 +227,7 @@ export function VerseLink({ reference }: VerseLinkProps) {
                         </span>
                     )}
                     {verses && !loading && !error && (
-                        <span className="mt-2 flex items-center justify-end gap-3">
+                        <span className="mt-2 flex items-center justify-end">
                             <button
                                 type="button"
                                 onClick={
@@ -250,28 +238,6 @@ export function VerseLink({ reference }: VerseLinkProps) {
                                 {chapterMode
                                     ? "← Kembali ke ayat"
                                     : "Baca 1 pasal penuh"}
-                            </button>
-                            <button
-                                type="button"
-                                onClick={handleToggleBookmark}
-                                title={
-                                    saved
-                                        ? "Hapus dari tersimpan"
-                                        : "Simpan ayat"
-                                }
-                                aria-label={
-                                    saved
-                                        ? "Hapus dari tersimpan"
-                                        : "Simpan ayat"
-                                }
-                                className="inline-flex items-center gap-1 text-[11px] font-medium text-muted-foreground hover:text-foreground"
-                            >
-                                {saved ? (
-                                    <BookmarkCheck className="size-3.5 text-primary" />
-                                ) : (
-                                    <Bookmark className="size-3.5" />
-                                )}
-                                {saved ? "Tersimpan" : "Simpan"}
                             </button>
                         </span>
                     )}

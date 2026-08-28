@@ -42,7 +42,6 @@ import {
     loadBibleBooks,
 } from "@/components/verse-link";
 import { SettingsDialog } from "@/components/settings-dialog";
-import { BookmarksDialog } from "@/components/bookmarks-dialog";
 import {
     type ChatSession,
     getSessions,
@@ -112,7 +111,6 @@ export function ChatLayout() {
     const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
     const [nickname, setNicknameState] = useState<string | null>(getNickname);
     const [showSettings, setShowSettings] = useState(false);
-    const [showBookmarks, setShowBookmarks] = useState(false);
     const scrollRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
     const abortRef = useRef<AbortController | null>(null);
@@ -489,11 +487,6 @@ export function ChatLayout() {
                 }}
             />
 
-            <BookmarksDialog
-                open={showBookmarks}
-                onOpenChange={setShowBookmarks}
-            />
-
             <AppSidebar
                 sessions={sessions}
                 activeId={activeId}
@@ -501,7 +494,6 @@ export function ChatLayout() {
                 onNew={startNewChat}
                 onDelete={handleDeleteSession}
                 onOpenSettings={() => setShowSettings(true)}
-                onOpenBookmarks={() => setShowBookmarks(true)}
             />
             <SidebarInset>
                 <div className="relative flex h-svh flex-col">
