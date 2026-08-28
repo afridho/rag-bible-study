@@ -195,16 +195,26 @@ export function ChatLayout() {
         }
     }, [messages, activeId, sessions]);
 
+    // Scroll to the newest message whenever the conversation changes or a
+    // different session is opened (opening a long chat should land at the end).
     useEffect(() => {
         scrollToBottom();
-    }, [messages]);
+    }, [messages, activeId]);
 
     function scrollToBottom() {
-        setTimeout(() => {
-            if (scrollRef.current) {
-                scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-            }
-        }, 50);
+        // `scrollRef` points at the ScrollArea Root; the element that actually
+        // scrolls is its inner Viewport. Grab it and pin to the bottom after the
+        // browser has laid out the new content (double rAF = after paint).
+        const pin = () => {
+            const root = scrollRef.current;
+            if (!root) return;
+            const viewport = root.querySelector<HTMLElement>(
+                '[data-slot="scroll-area-viewport"]',
+            );
+            const el = viewport ?? root;
+            el.scrollTop = el.scrollHeight;
+        };
+        requestAnimationFrame(() => requestAnimationFrame(pin));
     }
 
     function startNewChat() {
@@ -862,6 +872,22 @@ export function ChatLayout() {
                                                                         : "opacity-0 focus-within:opacity-100 group-hover:opacity-100",
                                                                 )}
                                                             >
+                                                                {isLastMessage && (
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={
+                                                                            handleRegenerate
+                                                                        }
+                                                                        disabled={
+                                                                            isLoading
+                                                                        }
+                                                                        title="Buat ulang jawaban"
+                                                                        aria-label="Buat ulang jawaban"
+                                                                        className="inline-flex size-7 items-center justify-center rounded-md transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50"
+                                                                    >
+                                                                        <RotateCcw className="size-4" />
+                                                                    </button>
+                                                                )}
                                                                 <button
                                                                     type="button"
                                                                     onClick={() =>
@@ -892,22 +918,6 @@ export function ChatLayout() {
                                                                 >
                                                                     <Download className="size-4" />
                                                                 </button>
-                                                                {isLastMessage && (
-                                                                    <button
-                                                                        type="button"
-                                                                        onClick={
-                                                                            handleRegenerate
-                                                                        }
-                                                                        disabled={
-                                                                            isLoading
-                                                                        }
-                                                                        title="Buat ulang jawaban"
-                                                                        aria-label="Buat ulang jawaban"
-                                                                        className="inline-flex size-7 items-center justify-center rounded-md transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50"
-                                                                    >
-                                                                        <RotateCcw className="size-4" />
-                                                                    </button>
-                                                                )}
                                                             </div>
                                                         )}
                                                     </div>
