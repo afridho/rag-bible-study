@@ -24,7 +24,7 @@ function ChatView() {
 
 function App() {
     return (
-        <ThemeProvider defaultTheme="dark">
+        <ThemeProvider defaultTheme="system">
             <Toaster>
                 <BrowserRouter>
                     <Routes>
